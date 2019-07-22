@@ -31,14 +31,30 @@ rayos <- Historicos %>%
   nest(-zone, -ciclo,  -variety, -year) %>% 
   mutate(data_mod = purrr::map(.x = data, .f = function(x){ x %>% dplyr::select(-RUNNO, -pd) %>% mutate(date = glue::glue('{month}-{order_date}'), id = 1:12)})) %>%
   dplyr::select(-data) %>% 
-  filter(row_number() == 1) %>% 
+  # filter(row_number() == 1) %>% 
   unnest() %>% 
   dplyr::select(year, variety, zone, ciclo, month, id, date, HWAM)
   
 
 
-rayos
+cv_Data <- rayos %>% # nest(-zone, -ciclo, -variety, -year)
+  group_by(zone, ciclo, variety, id) %>% 
+  summarise(HWAM_sd = sd(HWAM), M_HWAM = mean(HWAM)) %>% 
+  mutate(HWAM_cv = round(HWAM_sd/M_HWAM, 3)* 100 ) %>% 
+  ungroup() %>%
+  group_by(zone, ciclo, id) %>% 
+  summarise(cv_mean = mean(HWAM_cv)) 
 
 
 
-  
+ggplot(cv_Data, aes(id, y = cv_mean, colour = ciclo)) + 
+  geom_line() + 
+  geom_point() +
+  scale_x_continuous(breaks = seq(from = 1, to = 12, by = 1)) +
+  scale_colour_manual(values = c("#000080", "#008080")) +
+  facet_grid(. ~ zone,  labeller = labeller(zone = as_labeller(c("CERETE" = 'Cereté', "ESPINAL" = 'Espinal',  "LA_UNION" = 'La Unión')))) +
+  ylim(0, 100) +
+  theme_bw() + 
+  labs(x = 'Sowing date', y = 'Coefficient of variation (%)', colour = 'Planting\n cycle')
+
+
