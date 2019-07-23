@@ -11,7 +11,7 @@ library(glue)
 library(cowsay)
 
 
-
+# Datos historicos...
 Historicos <- read_csv("Datos_Julio/Historicos_1980-2013.csv") %>% dplyr::select(-X1)
 
 rayos <- Historicos %>%
@@ -51,10 +51,50 @@ ggplot(cv_Data, aes(id, y = cv_mean, colour = ciclo)) +
   geom_line() + 
   geom_point() +
   scale_x_continuous(breaks = seq(from = 1, to = 12, by = 1)) +
-  scale_colour_manual(values = c("#000080", "#008080")) +
+  scale_colour_manual(values = c("gray30", "#008080")) +
   facet_grid(. ~ zone,  labeller = labeller(zone = as_labeller(c("CERETE" = 'Cereté', "ESPINAL" = 'Espinal',  "LA_UNION" = 'La Unión')))) +
   ylim(0, 100) +
   theme_bw() + 
   labs(x = 'Sowing date', y = 'Coefficient of variation (%)', colour = 'Planting\n cycle')
+
+
+
+# 
+
+limites <- rayos %>% # nest(-zone, -ciclo, -variety, -year)
+  group_by(zone, ciclo, variety, id) %>% 
+  summarise(HWAM_sd = sd(HWAM), M_HWAM = mean(HWAM)) %>% 
+  mutate(HWAM_cv = round(HWAM_sd/M_HWAM, 3)* 100 ) %>% 
+  ungroup() %>%
+  group_by(zone, ciclo, id) %>% 
+  summarise(cv_mean = mean(HWAM_cv), cv_min = min((HWAM_cv)), cv_max = max(HWAM_cv)) 
+
+
+
+ggplot(limites, aes(id, y = cv_mean, colour = ciclo)) + 
+  geom_line()  + 
+  geom_ribbon(aes(ymin=cv_min, ymax=cv_max , fill=ciclo), alpha=0.2) + 
+  # geom_point() +
+  scale_x_continuous(breaks = seq(from = 1, to = 12, by = 1)) +
+  scale_fill_manual( 'Planting\n cycle' , values = c("gray30", "#008080")) +
+  scale_colour_manual('Planting\n cycle' , values = c("gray30", "#008080")) +
+  facet_grid(. ~ zone,  labeller = labeller(zone = as_labeller(c("CERETE" = 'Cereté', "ESPINAL" = 'Espinal',  "LA_UNION" = 'La Unión')))) +
+  ylim(0, 100) +
+  theme_bw() + 
+  labs(x = 'Sowing date', y = 'Coefficient of variation (%)')
+
+
+
+
+
+
+
+
+# test <- rayos %>% filter(!between(HWAM, 500, 8100)) # Op1
+# pos <- which(rayos$HWAM > 8100 | rayos$HWAM < 500) # Op2
+# test <- filter(rayos, row_number() %in% pos)
+# rayos[pos, ]
+
+
 
 
