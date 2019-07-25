@@ -52,10 +52,10 @@ ggplot(cv_Data, aes(id, y = cv_mean, colour = ciclo)) +
   geom_point() +
   scale_x_continuous(breaks = seq(from = 1, to = 12, by = 1)) +
   scale_colour_manual(values = c("gray30", "#008080")) +
-  facet_grid(. ~ zone,  labeller = labeller(zone = as_labeller(c("CERETE" = 'Cereté', "ESPINAL" = 'Espinal',  "LA_UNION" = 'La Unión')))) +
+  facet_grid(. ~ zone,  labeller = labeller(zone = as_labeller(c("CERETE" = 'Cereté (Córdoba)', "ESPINAL" = 'El Espinal (Tolima)',  "LA_UNION" = 'La Unión (Valle del Cauca)')))) +
   ylim(0, 100) +
   theme_bw() + 
-  labs(x = 'Sowing date', y = 'Coefficient of variation (%)', colour = 'Planting\n cycle')
+  labs(x = 'Planting date', y = 'Coefficient of variation (%)', colour = 'cycle')
 
 
 
@@ -74,14 +74,14 @@ limites <- rayos %>% # nest(-zone, -ciclo, -variety, -year)
 ggplot(limites, aes(id, y = cv_mean, colour = ciclo)) + 
   geom_line()  + 
   geom_ribbon(aes(ymin=cv_min, ymax=cv_max , fill=ciclo), alpha=0.2) + 
-  # geom_point() +
+  geom_point() +
   scale_x_continuous(breaks = seq(from = 1, to = 12, by = 1)) +
-  scale_fill_manual( 'Planting\n cycle' , values = c("gray30", "#008080")) +
-  scale_colour_manual('Planting\n cycle' , values = c("gray30", "#008080")) +
-  facet_grid(. ~ zone,  labeller = labeller(zone = as_labeller(c("CERETE" = 'Cereté', "ESPINAL" = 'Espinal',  "LA_UNION" = 'La Unión')))) +
+  scale_fill_manual( 'cycle' , values = c("gray30", "#008080")) +
+  scale_colour_manual('cycle' , values = c("gray30", "#008080")) +
+  facet_grid(. ~ zone,  labeller = labeller(zone = as_labeller(c("CERETE" = 'Cereté (Córdoba)', "ESPINAL" = 'El Espinal (Tolima)',  "LA_UNION" = 'La Unión (Valle del Cauca)')))) +
   ylim(0, 100) +
   theme_bw() + 
-  labs(x = 'Sowing date', y = 'Coefficient of variation (%)')
+  labs(x = 'Planting date', y = 'Coefficient of variation (%)')
 
 
 
@@ -94,6 +94,146 @@ ggplot(limites, aes(id, y = cv_mean, colour = ciclo)) +
 # pos <- which(rayos$HWAM > 8100 | rayos$HWAM < 500) # Op2
 # test <- filter(rayos, row_number() %in% pos)
 # rayos[pos, ]
+
+
+########################################################################################
+
+Groc <- read_csv("Datos_Julio/Groc.csv") %>% 
+  dplyr::select(-X1, -freq) %>%
+separate(TNAM....................., c('month', 'order_date'), sep = '/') %>%
+  mutate(zone = replace(zone, zone == 'LA UNION', 'LA_UNION'), 
+         month = str_remove(month, 'P') %>% as.numeric(), 
+         order_date = as.numeric(order_date)) 
+
+
+# Solo para verificacion...
+Groc %>% 
+  drop_na() %>% 
+  nest(-zone, -ciclo,  -variety, -year) %>% 
+  mutate(data_mod = purrr::map(.x = data, .f = nrow) ) %>%
+  unnest(data_mod) %>% 
+  dplyr::select(data_mod) %>% 
+  unique() # **** Por ahora todos los datos parecen completos. 
+
+
+# ####### - ###### - ####### - ########
+
+p <- Groc %>%
+  # drop_na() %>% 
+  nest(-zone, -ciclo,  -variety, -year) %>% 
+  mutate(data_mod = purrr::map(.x = data, .f =  function(x){ x %>% mutate(date = glue::glue('{month}-{order_date}'), id = 1:nrow(.))})) %>% 
+  dplyr::select(-data) %>% 
+  unnest() 
+
+
+count_p <- p %>% 
+  group_by(zone, variety, ciclo, id) %>% 
+  summarise(count = n())
+
+count_p %>% View()
+
+
+  
+# Hit score... matenme 
+
+mean_p <- p %>% 
+  dplyr::select(-order_date, -pd, -month, -date) %>% 
+  rename('Obs' = 'HWAM', 'Est' = 'HWAM.E') %>% 
+  gather(type, yield, -year, -variety, -zone, -ciclo, -cat, -id) %>% 
+  group_by(zone, variety, ciclo, id, type) %>% 
+  summarise( y_sd= sd(yield, na.rm = TRUE), median_Y = median(yield), yield = mean(yield)) %>% 
+  ungroup()
+  
+# mean_p %>% dplyr::select(variety) %>% unique
+
+ggplot(mean_p %>% filter(variety == 'FNC3056'), aes(x = id, y = yield, colour = type)) + 
+  geom_line() +
+  geom_point() + 
+  geom_ribbon(aes(ymin=yield - y_sd, ymax= yield + y_sd , fill=type), alpha=0.2) + 
+  ylim(c(0, 10000)) +
+  scale_x_continuous(breaks = seq(from = 1, to = 12, by = 1)) +
+  facet_grid(ciclo~zone) + 
+  theme_bw()
+
+
+ggplot(mean_p %>% filter(variety == 'DK234'), aes(x = id, y = yield, colour = type)) + 
+  geom_line() +
+  geom_point() + 
+  geom_ribbon(aes(ymin=yield - y_sd, ymax= yield + y_sd , fill=type), alpha=0.2) + 
+  ylim(c(0, 10000)) +
+  scale_x_continuous(breaks = seq(from = 1, to = 12, by = 1)) +
+  facet_grid(ciclo~zone) + 
+  theme_bw()
+
+
+
+# =-=-= Promedio de promedios
+
+
+C <- as_labeller(c('1' = 'Cycle 1', '2' = 'Cycle 2'))
+Z <- as_labeller(c("CERETE" = 'Cereté (Córdoba)', "ESPINAL" = 'El Espinal (Tolima)',  "UNION" = 'La Unión (Valle del Cauca)'))
+
+mean_p %>% 
+  group_by(zone, ciclo, id, type) %>% 
+  summarise( y_sd= sd(yield, na.rm = TRUE), median_Y = median(yield), yield = mean(yield)) %>% 
+  ggplot(aes(x = id, y = yield, colour = type)) + 
+  geom_line() +
+  geom_point() + 
+  geom_ribbon(aes(ymin=yield - y_sd, ymax= yield + y_sd , fill=type), alpha=0.2) + 
+  scale_fill_manual( NULL , values = c("gray30", "#008080"), labels = c('Sim', 'Obs')) +
+  scale_colour_manual(NULL , values = c("gray30", "#008080"), labels = c('Sim', 'Obs')) +
+  ylim(c(0, 10000)) +
+  scale_x_continuous(breaks = seq(from = 1, to = 12, by = 1)) +
+  facet_grid(ciclo~zone,  labeller = labeller(ciclo = C,  zone = Z)) + 
+  theme_bw() + 
+  labs(x = 'Planting date', y = 'Yield (Kg/ha)')
+
+
+
+
+# library(verification)
+
+# ####### - ###### - ####### - ########
+
+
+# Mejor fecha de siembra...
+
+
+Datos_p <- p %>% 
+  dplyr::select(-order_date, -pd, -month, -date, -cat) %>% 
+  rename('Obs' = 'HWAM', 'Est' = 'HWAM.E') %>% 
+  gather(type, yield, -year, -variety, -zone, -ciclo, -id) %>% 
+  nest(-year, -zone, -variety,-ciclo, -type) %>%
+  mutate(max_data = purrr::map(.x = data, .f = function(.x){.x %>% arrange(yield) %>% slice(n())})) %>% 
+  dplyr::select(-data) %>% 
+  unnest()
+ 
+
+
+test <- Datos_p %>%
+  nest(-year, -variety, -zone, -ciclo) %>% 
+  mutate(Dif = purrr::map(.x = data, .f = function(.x){.x[1,-1] - .x[2,-1]})) %>% 
+  dplyr::select(-data) %>% 
+  unnest()
+
+
+
+test1 <- test %>%
+  # dplyr::group_by(variety, zone, ciclo) %>% 
+  mutate(id = case_when( id > 3 ~ 4, id < -3 ~ -4, TRUE ~ as.numeric(id))) %>%
+  mutate(id = abs(id)) %>% 
+  count(zone, variety, zone, ciclo, id) # %>% 
+  # write_csv(., path = 'Datos_Julio/test1.csv')#  %>% 
+  # filter(zone == 'UNION' , variety == 'DK234', ciclo == 1)
+  
+
+
+
+
+
+
+
+
 
 
 
