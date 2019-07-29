@@ -57,7 +57,8 @@ ggplot(cv_Data, aes(id, y = cv_mean, colour = ciclo)) +
   theme_bw() + 
   labs(x = 'Planting date', y = 'Coefficient of variation (%)', colour = 'cycle')
 
-
+ggsave("graphs/His_cv.pdf", width = 8, height = 4)
+ggsave("graphs/His_cv.png", width = 8, height = 4)
 
 # 
 
@@ -83,17 +84,9 @@ ggplot(limites, aes(id, y = cv_mean, colour = ciclo)) +
   theme_bw() + 
   labs(x = 'Planting date', y = 'Coefficient of variation (%)')
 
+ggsave("graphs/His_Ic.pdf", width = 8, height = 4)
+ggsave("graphs/His_Ic.png", width = 8, height = 4)
 
-
-
-
-
-
-
-# test <- rayos %>% filter(!between(HWAM, 500, 8100)) # Op1
-# pos <- which(rayos$HWAM > 8100 | rayos$HWAM < 500) # Op2
-# test <- filter(rayos, row_number() %in% pos)
-# rayos[pos, ]
 
 
 ########################################################################################
@@ -145,19 +138,20 @@ mean_p <- p %>%
 C <- as_labeller(c('1' = 'Cycle 1', '2' = 'Cycle 2'))
 Z <- as_labeller(c("CERETE" = 'Cereté (Córdoba)', "ESPINAL" = 'El Espinal (Tolima)',  "UNION" = 'La Unión (Valle del Cauca)'))
 
+# Este graph es por variedad, asi que aun no esta listo para el guardado...
+# ggplot(mean_p %>% filter(variety == 'FNC3056'), aes(x = id, y = yield, colour = type)) + 
+#   geom_line() +
+#   geom_point() + 
+#   geom_ribbon(aes(ymin=yield - y_sd, ymax= yield + y_sd , fill=type), alpha=0.2)  + 
+#   scale_fill_manual( NULL , values = c("gray30", "#008080"), labels = c('Sim', 'Obs')) +
+#   scale_colour_manual(NULL , values = c("gray30", "#008080"), labels = c('Sim', 'Obs')) +
+#   ylim(c(0, 10000)) +
+#   scale_x_continuous(breaks = seq(from = 1, to = 12, by = 1)) +
+#   facet_grid(ciclo~zone,  labeller = labeller(ciclo = C,  zone = Z)) + 
+#   theme_bw() + 
+#   labs(x = 'Planting date', y = 'Yield (Kg/ha)')
 
 
-ggplot(mean_p %>% filter(variety == 'FNC3056'), aes(x = id, y = yield, colour = type)) + 
-  geom_line() +
-  geom_point() + 
-  geom_ribbon(aes(ymin=yield - y_sd, ymax= yield + y_sd , fill=type), alpha=0.2)  + 
-  scale_fill_manual( NULL , values = c("gray30", "#008080"), labels = c('Sim', 'Obs')) +
-  scale_colour_manual(NULL , values = c("gray30", "#008080"), labels = c('Sim', 'Obs')) +
-  ylim(c(0, 10000)) +
-  scale_x_continuous(breaks = seq(from = 1, to = 12, by = 1)) +
-  facet_grid(ciclo~zone,  labeller = labeller(ciclo = C,  zone = Z)) + 
-  theme_bw() + 
-  labs(x = 'Planting date', y = 'Yield (Kg/ha)')
 
 
 # =-=-= Promedio de promedios
@@ -176,6 +170,8 @@ mean_p %>%
   theme_bw() + 
   labs(x = 'Planting date', y = 'Yield (Kg/ha)')
 
+ggsave("graphs/G_mean_Ic.pdf", width = 10, height = 5)
+ggsave("graphs/G_mean_Ic.png", width = 10, height = 5)
 
  
 # library(verification)
@@ -205,25 +201,28 @@ test1 <- test %>%
   # dplyr::group_by(variety, zone, ciclo) %>% 
   mutate(id = case_when( id > 3 ~ 4, id < -3 ~ -4, TRUE ~ as.numeric(id))) %>%
   mutate(id = abs(id)) %>% 
-  count(zone, variety, zone, ciclo, id) # %>% 
-  # write_csv(., path = 'Datos_Julio/test1.csv')#  %>% 
-  # filter(zone == 'UNION' , variety == 'DK234', ciclo == 1)
+  count(zone, variety, zone, ciclo, id) # %>% write_csv(., path = 'Datos_Julio/test1.csv')
   
 
-# =-=-=-=-=-=-=-=
+
+
+
+# =-=-=
 test1 %>% 
   ggplot(aes(x = id, y = n, fill = as.character(ciclo)))+
   geom_bar(stat = 'identity', position = 'dodge', colour = 'black', alpha = 0.7) + 
-  facet_grid(zone ~ variety,  labeller = labeller(ciclo = C,  zone = Z)) + 
+  facet_grid(zone ~ variety,  labeller = labeller(zone = Z)) + 
   scale_x_continuous(breaks=0:4, labels=c('0', '5', "10", '15', '20+'))+
-  scale_fill_manual( ,values = c("gray30", "#008080"), labels = c('Sim', 'Obs')) +
+  scale_fill_manual(values = c("gray30", "#008080")) +
   scale_y_continuous(breaks = seq(from = 0, to = 9, by = 1)) + 
   labs(x = 'Diference between planting dates obs - sim (days)', y = 'years', fill = 'Cycle') +
   theme_bw() 
 
+ggsave("graphs/Diference_VZ.pdf", width = 10, height = 5)
+ggsave("graphs/Diference_VZ.png", width = 10, height = 5)
 
 
-
+# =-=-=
 test1 %>% 
   ggplot(aes(x = id, y = n, fill = variety))+
   geom_bar(stat = 'identity', position = 'dodge', colour = 'black', alpha = .7) + 
@@ -235,7 +234,8 @@ test1 %>%
   labs(x = 'Diference between planting dates obs - sim (days)', y = 'years', fill = 'Variety') +
   theme_bw() 
 
-
+ggsave("graphs/Diference_ZC.pdf", width = 10, height = 5)
+ggsave("graphs/Diference_ZC.png", width = 10, height = 5)
 
 #############################################################################################
 ###  Acumulando 
@@ -256,34 +256,90 @@ a <- Datos_p %>%
   unnest()
 
 
-a
+# =-=-=-=-=-=-=-=-=-=-=-=-=-= Grafico de prueba... solo tratando de aprenderlo. 
+# test1 %>% 
+#   ggplot(aes(x = id, y = n, , label=n,  colour = variety)) + 
+#   geom_point(stat='identity', size=6)  +
+#   geom_segment(aes(y = 0,  x = id,  yend = n,  xend =  id)) +
+#   geom_text(color="white", size=2) + 
+#   scale_x_continuous(breaks=0:4, labels=c('0', '5', "10", '15', '20+'))+
+#   scale_y_continuous(breaks = seq(from = 0, to = 9, by = 1))   +
+#   # coord_flip() +
+#   facet_grid(ciclo ~ zone,  labeller = labeller(ciclo = C,  zone = Z)) +
+#   theme_bw()
+
+# ggsave("graphs/mtcars.pdf", width = 10, height = 5)
+# ggsave("graphs/mtcars.png", width = 10, height = 5)
 
 
 
+library(pROC)
 
-# =-=-=-=-=-=-=-=-=-=-=-=-=-= ejemplo de internet
-ggplot(mtcars, aes(x=`car name`, y=mpg_z, label=mpg_z)) + 
-  geom_point(stat='identity', fill="black", size=6)  +
-  geom_segment(aes(y = 0, 
-                   x = `car name`, 
-                   yend = mpg_z, 
-                   xend = `car name`), 
-               color = "black") +
-  geom_text(color="white", size=2) +
-  labs(title="Diverging Lollipop Chart", 
-       subtitle="Normalized mileage from 'mtcars': Lollipop") + 
-  ylim(-2.5, 2.5) +
-  coord_flip()
+Groc %>% names()
 
 
-# =-=-=-=
-test1 %>% 
-  ggplot(aes(x = id, y = n, , label=n,  colour = variety)) + 
-  geom_point(stat='identity', size=6)  +
-  geom_segment(aes(y = 0,  x = id,  yend = n,  xend =  id)) +
-  geom_text(color="white", size=2) + 
-  scale_x_continuous(breaks=0:4, labels=c('0', '5', "10", '15', '20+'))+
-  scale_y_continuous(breaks = seq(from = 0, to = 9, by = 1))   +
-  # coord_flip() +
-  facet_grid(ciclo ~ zone,  labeller = labeller(ciclo = C,  zone = Z)) +
-  theme_bw()
+
+# pROC::roc(Groc$cat, Groc$HWAM.E)$auc %>% as.numeric() 
+
+
+ROC_m <- function(f){
+  ter <- quantile(f$HWAM, c(0.33, 0.66))
+  f <- f %>% mutate(cat = case_when( HWAM < ter[1] ~ 'Bajo', 
+                                     HWAM > ter[2] ~ 'Alto', TRUE ~ 'Medio'))
+  
+  a <- pROC::roc(f %>% filter(cat != 'Alto') %>% .$cat, f %>% filter(cat != 'Alto') %>% .$HWAM.E)$auc %>% as.numeric() %>% round(., 2)
+  b <- pROC::roc(f %>% filter(cat != 'Bajo') %>% .$cat, f %>% filter(cat != 'Bajo') %>% .$HWAM.E)$auc %>% as.numeric() %>% round(., 2)
+  c <- pROC::roc(f %>% filter(cat != 'Medio') %>% .$cat, f %>% filter(cat != 'Medio') %>% .$HWAM.E)$auc %>% as.numeric() %>% round(., 2)
+  d <- mean(c(a, b, c)) %>% round(., 2)
+  
+  cat(glue::glue('No Alto: {a} - No Bajo: {b} - No Medio: {c} - GROC = {d}'))
+  all <- tibble(N_Alto = a, N_Bajo = b, N_Medio = c, M_all = d, nrow_data = nrow(f))
+return(all)}
+
+
+
+# f <- p %>% nest(-zone,  -id) %>% filter(row_number() == 1) %>% dplyr::select(data) %>% unnest()
+
+
+
+ROC_t <- p %>% 
+  nest(-zone,  -ciclo) %>% 
+  # filter(! row_number() %in% 25:28) %>%
+  mutate(ROC = purrr::map(.x = data, .f = ROC_m))
+
+
+# p %>% 
+#   nest(-zone, -id) %>% 
+#   filter(row_number() == 36) %>% 
+#   dplyr::select(data) %>%
+#   unnest() %>% 
+#   dplyr::select(cat) %>% 
+#   unique()
+
+
+ROC_t %>% 
+  dplyr::select(-data) %>% 
+  unnest() %>% 
+  dplyr::select(-nrow_data) %>% 
+  ggplot(aes(zone, M_all, fill = as.character(ciclo))) + 
+  geom_bar(stat = 'identity', position = 'dodge') + 
+  # scale_x_continuous(breaks = seq(from = 1, to = 12, by = 1)) + 
+  ylim(c(0, 1)) + 
+  theme_bw() + 
+  geom_hline(yintercept = 0.5,  color= "#008080", size = 1.2) +
+  labs(x = NULL, y = 'GROC', fill = NULL)
+
+
+
+p %>% 
+  nest( -id) %>%
+  mutate(ROC = purrr::map(.x = data, .f = ROC_m)) %>% 
+  dplyr::select(-data) %>% 
+  unnest() %>% 
+  dplyr::select(-nrow_data) %>% 
+  ggplot(aes(id, M_all)) + 
+  geom_bar(stat = 'identity') +
+  scale_x_continuous(breaks = seq(from = 1, to = 12, by = 1)) + 
+  ylim(c(0, 1)) + 
+  theme_bw() + 
+  geom_hline(yintercept = 0.5,  color= "#008080", size = 1.2)
