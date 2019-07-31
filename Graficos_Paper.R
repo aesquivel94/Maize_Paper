@@ -93,20 +93,16 @@ ggsave("graphs/His_Ic.png", width = 8, height = 4)
 
 Groc <- read_csv("Datos_Julio/Groc.csv") %>% 
   dplyr::select(-X1, -freq) %>%
-separate(TNAM....................., c('month', 'order_date'), sep = '/') %>%
+  separate(TNAM....................., c('month', 'order_date'), sep = '/') %>%
   mutate(zone = replace(zone, zone == 'LA UNION', 'LA_UNION'), 
          month = str_remove(month, 'P') %>% as.numeric(), 
          order_date = as.numeric(order_date)) 
 
 
 # Solo para verificacion...
-Groc %>% 
-  drop_na() %>% 
-  nest(-zone, -ciclo,  -variety, -year) %>% 
-  mutate(data_mod = purrr::map(.x = data, .f = nrow) ) %>%
-  unnest(data_mod) %>% 
-  dplyr::select(data_mod) %>% 
-  unique() # **** Por ahora todos los datos parecen completos. 
+Groc %>% drop_na() %>% nest(-zone, -ciclo,  -variety, -year) %>% 
+  mutate(data_mod = purrr::map(.x = data, .f = nrow) ) %>% unnest(data_mod) %>% 
+  dplyr::select(data_mod) %>% unique() # **** Por ahora todos los datos parecen completos. 
 
 
 # ####### - ###### - ####### - ########
@@ -204,9 +200,6 @@ test1 <- test %>%
   count(zone, variety, zone, ciclo, id) # %>% write_csv(., path = 'Datos_Julio/test1.csv')
   
 
-
-
-
 # =-=-=
 test1 %>% 
   ggplot(aes(x = id, y = n, fill = as.character(ciclo)))+
@@ -274,14 +267,7 @@ a <- Datos_p %>%
 
 
 library(pROC)
-
-Groc %>% names()
-
-
-
-# pROC::roc(Groc$cat, Groc$HWAM.E)$auc %>% as.numeric() 
-
-
+# f <- p %>% nest(-zone,  -id) %>% filter(row_number() == 1) %>% dplyr::select(data) %>% unnest()
 ROC_m <- function(f){
   ter <- quantile(f$HWAM, c(0.33, 0.66))
   f <- f %>% mutate(cat = case_when( HWAM < ter[1] ~ 'Bajo', 
@@ -295,12 +281,6 @@ ROC_m <- function(f){
   cat(glue::glue('No Alto: {a} - No Bajo: {b} - No Medio: {c} - GROC = {d}'))
   all <- tibble(N_Alto = a, N_Bajo = b, N_Medio = c, M_all = d, nrow_data = nrow(f))
 return(all)}
-
-
-
-# f <- p %>% nest(-zone,  -id) %>% filter(row_number() == 1) %>% dplyr::select(data) %>% unnest()
-
-
 
 ROC_t <- p %>% 
   nest(-zone,  -ciclo) %>% 
@@ -316,30 +296,69 @@ ROC_t <- p %>%
 #   dplyr::select(cat) %>% 
 #   unique()
 
-
 ROC_t %>% 
   dplyr::select(-data) %>% 
   unnest() %>% 
   dplyr::select(-nrow_data) %>% 
   ggplot(aes(zone, M_all, fill = as.character(ciclo))) + 
   geom_bar(stat = 'identity', position = 'dodge') + 
-  # scale_x_continuous(breaks = seq(from = 1, to = 12, by = 1)) + 
+  scale_fill_manual( 'cycle' , values = c("gray30", "#008080")) +
   ylim(c(0, 1)) + 
   theme_bw() + 
-  geom_hline(yintercept = 0.5,  color= "#008080", size = 1.2) +
+  geom_hline(yintercept = 0.5,  color= "gray", size = 1.2) +
   labs(x = NULL, y = 'GROC', fill = NULL)
 
 
-
 p %>% 
-  nest( -id) %>%
+  nest(-ciclo,-id) %>%
   mutate(ROC = purrr::map(.x = data, .f = ROC_m)) %>% 
   dplyr::select(-data) %>% 
   unnest() %>% 
   dplyr::select(-nrow_data) %>% 
-  ggplot(aes(id, M_all)) + 
-  geom_bar(stat = 'identity') +
+  ggplot(aes(id, M_all, fill = as.character(ciclo))) + 
+  geom_bar(stat = 'identity', position = 'dodge') + 
+  scale_fill_manual( 'cycle' , values = c("gray30", "#008080")) +
   scale_x_continuous(breaks = seq(from = 1, to = 12, by = 1)) + 
   ylim(c(0, 1)) + 
   theme_bw() + 
-  geom_hline(yintercept = 0.5,  color= "#008080", size = 1.2)
+  geom_hline(yintercept = 0.5,  color= "gray", size = 1.2) + 
+  labs(x = 'Planting date', y = 'GROC', fill = NULL)
+
+
+
+
+
+
+# =-=-=-=-=-=-=-=-=-=-=-=-=
+
+f <- p %>% nest(-zone,  -id) %>% filter(row_number() == 10) %>% dplyr::select(data) %>% unnest()
+
+j <- f  %>% 
+  dplyr::select(-order_date, -month, -year, -pd, -cat, -date, -ciclo) %>% 
+  mutate(dif = HWAM - HWAM.E, dif_two = dif^2, dif_abs = abs(dif))
+
+ind <- j %>% 
+  summarise(mean_obs = mean(HWAM),
+    RMSE = sqrt((1/nrow(.))*sum(dif_two)), 
+    d_a = (1/nrow(.))*sum(dif),
+    d_ap = d_a/mean_obs*100, 
+    pearson = cor(HWAM, HWAM.E), 
+    R_2 = pearson^2, 
+    spearman = cor(HWAM, HWAM.E, method = 'spearman'), 
+    kendall = cor(HWAM, HWAM.E, method = 'kendall'))
+
+ggplot(j, aes(x = HWAM.E, y = HWAM)) + geom_point() + geom_smooth(method = lm, se = FALSE) + theme_bw()
+
+
+sd_d <- j %>% mutate(sd = (dif - ind$d_a)^2/(nrow(.)-1) ) %>% summarise(sd = sqrt(sum(sd)) ) %>% as.numeric()
+
+ind %>% mutate(sd_d = sd_d) %>% dplyr::select(-mean_obs)
+
+
+# RMSE
+# f %>% yardstick::rmse(truth = HWAM,  estimate = HWAM.E)
+# f %>% yardstick::mae(truth = HWAM,  estimate = HWAM.E)
+# yardstick::metrics(f, truth = HWAM,  estimate = HWAM.E)
+
+
+
