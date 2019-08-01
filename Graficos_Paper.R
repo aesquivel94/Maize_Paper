@@ -9,12 +9,18 @@ library(tidyverse)
 library(lubridate)
 library(glue)
 library(cowsay)
+library(pROC)
+
+# =-=-=-=-=-= Generacion de los graficos para datos Historical. 
+cowsay::say(what = "Generation of graphs for historical data.", by = "rabbit", what_color = "#FF4500", by_color = "red")
+
+# =-=-=-=-=-=-=-=-=
+# Data reading.
+Historical <- read_csv("D:/OneDrive - CGIAR/Desktop/Maize_Paper/Maize_Paper/Datos_Julio/Historicos_1980-2013.csv") %>% dplyr::select(-X1)
 
 
-# Datos historicos...
-Historicos <- read_csv("Datos_Julio/Historicos_1980-2013.csv") %>% dplyr::select(-X1)
-
-rayos <- Historicos %>%
+# Filter historic data. 
+Historic_fil <- Historical %>%
   dplyr::select(RUNNO,TNAM.....................,  pd, year, HWAM,  variety, zone) %>% 
   mutate(zone = replace(zone, zone == 'LA UNION', 'LA_UNION')) %>%
   mutate(pd = as.Date(pd,"%m/%d/%Y")) %>%
@@ -31,13 +37,11 @@ rayos <- Historicos %>%
   nest(-zone, -ciclo,  -variety, -year) %>% 
   mutate(data_mod = purrr::map(.x = data, .f = function(x){ x %>% dplyr::select(-RUNNO, -pd) %>% mutate(date = glue::glue('{month}-{order_date}'), id = 1:12)})) %>%
   dplyr::select(-data) %>% 
-  # filter(row_number() == 1) %>% 
   unnest() %>% 
   dplyr::select(year, variety, zone, ciclo, month, id, date, HWAM)
   
-
-
-cv_Data <- rayos %>% # nest(-zone, -ciclo, -variety, -year)
+# Historical coefficient of variation.
+cv_Data <- Historic_fil %>% 
   group_by(zone, ciclo, variety, id) %>% 
   summarise(HWAM_sd = sd(HWAM), M_HWAM = mean(HWAM)) %>% 
   mutate(HWAM_cv = round(HWAM_sd/M_HWAM, 3)* 100 ) %>% 
@@ -45,8 +49,7 @@ cv_Data <- rayos %>% # nest(-zone, -ciclo, -variety, -year)
   group_by(zone, ciclo, id) %>% 
   summarise(cv_mean = mean(HWAM_cv)) 
 
-
-
+# CV historical data graph. 
 ggplot(cv_Data, aes(id, y = cv_mean, colour = ciclo)) + 
   geom_line() + 
   geom_point() +
@@ -60,9 +63,9 @@ ggplot(cv_Data, aes(id, y = cv_mean, colour = ciclo)) +
 ggsave("graphs/His_cv.pdf", width = 8, height = 4)
 ggsave("graphs/His_cv.png", width = 8, height = 4)
 
-# 
 
-limites <- rayos %>% # nest(-zone, -ciclo, -variety, -year)
+# Construction of the limits.
+limits <- Historic_fil %>% 
   group_by(zone, ciclo, variety, id) %>% 
   summarise(HWAM_sd = sd(HWAM), M_HWAM = mean(HWAM)) %>% 
   mutate(HWAM_cv = round(HWAM_sd/M_HWAM, 3)* 100 ) %>% 
@@ -70,9 +73,8 @@ limites <- rayos %>% # nest(-zone, -ciclo, -variety, -year)
   group_by(zone, ciclo, id) %>% 
   summarise(cv_mean = mean(HWAM_cv), cv_min = min((HWAM_cv)), cv_max = max(HWAM_cv)) 
 
-
-
-ggplot(limites, aes(id, y = cv_mean, colour = ciclo)) + 
+# Graph with limits. 
+ggplot(limits, aes(id, y = cv_mean, colour = ciclo)) + 
   geom_line()  + 
   geom_ribbon(aes(ymin=cv_min, ymax=cv_max , fill=ciclo), alpha=0.2) + 
   geom_point() +
@@ -88,10 +90,12 @@ ggsave("graphs/His_Ic.pdf", width = 8, height = 4)
 ggsave("graphs/His_Ic.png", width = 8, height = 4)
 
 
-
 ########################################################################################
+# =-=-=-=-=-= Retrospective analysis. 
+cowsay::say(what = "Retrospective analysis.", by = "smallcat", what_color = "#FF4500", by_color = "red")
 
-Groc <- read_csv("Datos_Julio/Groc.csv") %>% 
+# Reading the retrospective database
+Retro_data <- read_csv("Datos_Julio/Groc.csv") %>% 
   dplyr::select(-X1, -freq) %>%
   separate(TNAM....................., c('month', 'order_date'), sep = '/') %>%
   mutate(zone = replace(zone, zone == 'LA UNION', 'LA_UNION'), 
@@ -99,58 +103,33 @@ Groc <- read_csv("Datos_Julio/Groc.csv") %>%
          order_date = as.numeric(order_date)) 
 
 
-# Solo para verificacion...
-Groc %>% drop_na() %>% nest(-zone, -ciclo,  -variety, -year) %>% 
-  mutate(data_mod = purrr::map(.x = data, .f = nrow) ) %>% unnest(data_mod) %>% 
-  dplyr::select(data_mod) %>% unique() # **** Por ahora todos los datos parecen completos. 
-
-
-# ####### - ###### - ####### - ########
-
-p <- Groc %>%
-  # drop_na() %>% 
+# Filter retrospective data
+Retro_filter <- Retro_data %>%
   nest(-zone, -ciclo,  -variety, -year) %>% 
   mutate(data_mod = purrr::map(.x = data, .f =  function(x){ x %>% mutate(date = glue::glue('{month}-{order_date}'), id = 1:nrow(.))})) %>% 
   dplyr::select(-data) %>% 
   unnest() 
 
-
-count_p <- p %>% 
+# Concordance count planting dates.
+count_pd <- Retro_filter%>% 
   group_by(zone, variety, ciclo, id) %>% 
   summarise(count = n())
 
-# Hit score... matenme 
-
-mean_p <- p %>% 
+# Simulated average performance with retrospective and observed data.
+mean_p <- Retro_filter%>% 
   dplyr::select(-order_date, -pd, -month, -date) %>% 
   rename('Obs' = 'HWAM', 'Est' = 'HWAM.E') %>% 
   gather(type, yield, -year, -variety, -zone, -ciclo, -cat, -id) %>% 
   group_by(zone, variety, ciclo, id, type) %>% 
   summarise( y_sd= sd(yield, na.rm = TRUE), median_Y = median(yield), yield = mean(yield)) %>% 
   ungroup()
-  
-# mean_p %>% dplyr::select(variety) %>% unique
 
+# =-=-=-= ggplot labellers (only for the graphs).  
 C <- as_labeller(c('1' = 'Cycle 1', '2' = 'Cycle 2'))
 Z <- as_labeller(c("CERETE" = 'Cereté (Córdoba)', "ESPINAL" = 'El Espinal (Tolima)',  "UNION" = 'La Unión (Valle del Cauca)'))
 
-# Este graph es por variedad, asi que aun no esta listo para el guardado...
-# ggplot(mean_p %>% filter(variety == 'FNC3056'), aes(x = id, y = yield, colour = type)) + 
-#   geom_line() +
-#   geom_point() + 
-#   geom_ribbon(aes(ymin=yield - y_sd, ymax= yield + y_sd , fill=type), alpha=0.2)  + 
-#   scale_fill_manual( NULL , values = c("gray30", "#008080"), labels = c('Sim', 'Obs')) +
-#   scale_colour_manual(NULL , values = c("gray30", "#008080"), labels = c('Sim', 'Obs')) +
-#   ylim(c(0, 10000)) +
-#   scale_x_continuous(breaks = seq(from = 1, to = 12, by = 1)) +
-#   facet_grid(ciclo~zone,  labeller = labeller(ciclo = C,  zone = Z)) + 
-#   theme_bw() + 
-#   labs(x = 'Planting date', y = 'Yield (Kg/ha)')
 
-
-
-
-# =-=-= Promedio de promedios
+# =-=-= Comparison of simulated average performance with retrospective and observed data.
 mean_p %>% 
   group_by(zone, ciclo, id, type) %>% 
   summarise( y_sd= sd(yield, na.rm = TRUE), median_Y = median(yield), yield = mean(yield)) %>% 
@@ -170,13 +149,9 @@ ggsave("graphs/G_mean_Ic.pdf", width = 10, height = 5)
 ggsave("graphs/G_mean_Ic.png", width = 10, height = 5)
 
  
-# library(verification)
-
 # ####### - ###### - ####### - ########
-
-
-# Mejor fecha de siembra...
-Datos_p <- p %>% 
+# Define better planting date.
+Datos_p <- Retro_filter%>% 
   dplyr::select(-order_date, -pd, -month, -date, -cat) %>% 
   rename('Obs' = 'HWAM', 'Est' = 'HWAM.E') %>% 
   gather(type, yield, -year, -variety, -zone, -ciclo, -id) %>% 
@@ -185,23 +160,21 @@ Datos_p <- p %>%
   dplyr::select(-data) %>% 
   unnest()
  
-# =-=-=-=-=-= Listo... entonces de aquí en adelante 
-test <- Datos_p %>%
+# Difference between planting dates. 
+D_B_plantingD <- Datos_p %>%
   nest(-year, -variety, -zone, -ciclo) %>% 
   mutate(Dif = purrr::map(.x = data, .f = function(.x){.x[1,-1] - .x[2,-1]})) %>% 
   dplyr::select(-data) %>% 
   unnest()
 
-
-test1 <- test %>%
-  # dplyr::group_by(variety, zone, ciclo) %>% 
+# Limits for planting dates.
+plantingD <- D_B_plantingD %>%
   mutate(id = case_when( id > 3 ~ 4, id < -3 ~ -4, TRUE ~ as.numeric(id))) %>%
   mutate(id = abs(id)) %>% 
-  count(zone, variety, zone, ciclo, id) # %>% write_csv(., path = 'Datos_Julio/test1.csv')
+  count(zone, variety, zone, ciclo, id) # %>% write_csv(., path = 'Datos_Julio/plantingD.csv')
   
 
-# =-=-=
-test1 %>% 
+plantingD %>% 
   ggplot(aes(x = id, y = n, fill = as.character(ciclo)))+
   geom_bar(stat = 'identity', position = 'dodge', colour = 'black', alpha = 0.7) + 
   facet_grid(zone ~ variety,  labeller = labeller(zone = Z)) + 
@@ -214,15 +187,13 @@ test1 %>%
 ggsave("graphs/Diference_VZ.pdf", width = 10, height = 5)
 ggsave("graphs/Diference_VZ.png", width = 10, height = 5)
 
-
-# =-=-=
-test1 %>% 
+# Concordance of planting dates - [cycle * zone] - colors: variety.
+plantingD %>% 
   ggplot(aes(x = id, y = n, fill = variety))+
   geom_bar(stat = 'identity', position = 'dodge', colour = 'black', alpha = .7) + 
   facet_grid(ciclo~zone,  labeller = labeller(ciclo = C,  zone = Z)) + 
   scale_fill_viridis_d() + 
   scale_x_continuous(breaks=0:4, labels=c('0', '5', "10", '15', '20+'))+
-  # scale_fill_manual( NULL , values = c("gray30", "#008080"), labels = c('Sim', 'Obs')) +
   scale_y_continuous(breaks = seq(from = 0, to = 9, by = 1)) + 
   labs(x = 'Diference between planting dates obs - sim (days)', y = 'years', fill = 'Variety') +
   theme_bw() 
@@ -230,16 +201,14 @@ test1 %>%
 ggsave("graphs/Diference_ZC.pdf", width = 10, height = 5)
 ggsave("graphs/Diference_ZC.png", width = 10, height = 5)
 
-#############################################################################################
-###  Acumulando 
-
-a <- Datos_p %>%
+# =-=-=-=-=-=-=-=
+# Accumulation of matches by date.
+Acum_Con_by_date <- Datos_p %>%
   nest(-year, -variety, -zone, -ciclo) %>% 
   mutate(Dif = purrr::map(.x = data, .f = function(.x){.x[1,-1] - .x[2,-1]})) %>% 
   dplyr::select(-data) %>% 
   unnest() %>% 
   mutate(id = abs(id)) %>%
-  # dplyr::group_by(variety, zone, ciclo) %>% 
   mutate(id = case_when( id > 3 ~ 4, id < -3 ~ -4, TRUE ~ as.numeric(id))) %>%
   mutate(id = abs(id)) %>% 
   count(zone, variety, zone, ciclo, id) %>% 
@@ -249,26 +218,14 @@ a <- Datos_p %>%
   unnest()
 
 
-# =-=-=-=-=-=-=-=-=-=-=-=-=-= Grafico de prueba... solo tratando de aprenderlo. 
-# test1 %>% 
-#   ggplot(aes(x = id, y = n, , label=n,  colour = variety)) + 
-#   geom_point(stat='identity', size=6)  +
-#   geom_segment(aes(y = 0,  x = id,  yend = n,  xend =  id)) +
-#   geom_text(color="white", size=2) + 
-#   scale_x_continuous(breaks=0:4, labels=c('0', '5', "10", '15', '20+'))+
-#   scale_y_continuous(breaks = seq(from = 0, to = 9, by = 1))   +
-#   # coord_flip() +
-#   facet_grid(ciclo ~ zone,  labeller = labeller(ciclo = C,  zone = Z)) +
-#   theme_bw()
+# =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+cowsay::say(what = "Indicators: GROC, RMSE, ...", by = "cat", what_color = "#FF4500", by_color = "red")
 
-# ggsave("graphs/mtcars.pdf", width = 10, height = 5)
-# ggsave("graphs/mtcars.png", width = 10, height = 5)
-
-
-
-library(pROC)
-# f <- p %>% nest(-zone,  -id) %>% filter(row_number() == 1) %>% dplyr::select(data) %>% unnest()
-ROC_m <- function(f){
+# This function computes validation indicators. 
+ROC_m <- function(f, name){
+  # f <- Retro_filter%>% nest(-zone,  -ciclo) %>% filter(row_number() == 2) %>% dplyr::select(data) %>% unnest()
+  # name <- Retro_filter%>% nest(-zone,  -ciclo) %>% filter(row_number() == 2) %>% mutate(name = glue::glue('{zone}_{ciclo}')) %>% .$name
+  
   ter <- quantile(f$HWAM, c(0.33, 0.66))
   f <- f %>% mutate(cat = case_when( HWAM < ter[1] ~ 'Bajo', 
                                      HWAM > ter[2] ~ 'Alto', TRUE ~ 'Medio'))
@@ -280,22 +237,41 @@ ROC_m <- function(f){
   
   cat(glue::glue('No Alto: {a} - No Bajo: {b} - No Medio: {c} - GROC = {d}'))
   all <- tibble(N_Alto = a, N_Bajo = b, N_Medio = c, M_all = d, nrow_data = nrow(f))
-return(all)}
+  
+  
+  j <- f   %>% mutate(dif = HWAM - HWAM.E, dif_two = dif^2, dif_abs = abs(dif))
+  
+  ind <- j %>% summarise(mean_obs = mean(HWAM),
+              RMSE = sqrt((1/nrow(.))*sum(dif_two)), 
+              d_a = (1/nrow(.))*sum(dif), d_ap = abs(d_a)/mean_obs*100, 
+              pearson = cor(HWAM, HWAM.E), R_2 = pearson^2, 
+              spearman = cor(HWAM, HWAM.E, method = 'spearman'), 
+              kendall = cor(HWAM, HWAM.E, method = 'kendall'))
+  
+  sd_d <- j %>% mutate(sd = (dif - ind$d_a)^2/(nrow(.)-1) ) %>% summarise(sd = sqrt(sum(sd)) ) %>% as.numeric()
+  all <- ind %>% mutate(sd_d = sd_d) %>% dplyr::select(-mean_obs) %>% bind_cols(., all)
+  
+  
+  min_max <- j %>% dplyr::select(HWAM, HWAM.E) %>% gather(name, value) %>% arrange(value) %>% slice(1,n()) %>% .$value
+  
+ p <- ggplot(j, aes(x = HWAM.E, y = HWAM)) + geom_point(colour = "#008080") + 
+    geom_smooth(method = lm, se = FALSE) + theme_bw() + xlim(c(min_max[1], min_max[2])) +
+    ylim(c(min_max[1], min_max[2])) + labs(x = 'Simulated', y ='Observed')
+  
+ png(glue::glue('graphs/disp/{name}.png'),  width = 720, height = 450, res = 120)
+ print(p)
+ dev.off()
+   
+  return(all)}
 
-ROC_t <- p %>% 
-  nest(-zone,  -ciclo) %>% 
-  # filter(! row_number() %in% 25:28) %>%
-  mutate(ROC = purrr::map(.x = data, .f = ROC_m))
 
+# Table with indicators. 
+ROC_t <- Retro_filter%>% 
+  nest(-zone,  -ciclo) %>% # if you want other filters chage this line
+  mutate(name = glue::glue('{zone}_{ciclo}')) %>% # and this line
+  mutate(ROC = purrr::map2(.x = data, .y = name, .f = ROC_m))
 
-# p %>% 
-#   nest(-zone, -id) %>% 
-#   filter(row_number() == 36) %>% 
-#   dplyr::select(data) %>%
-#   unnest() %>% 
-#   dplyr::select(cat) %>% 
-#   unique()
-
+# Graph for GROC indicator. 
 ROC_t %>% 
   dplyr::select(-data) %>% 
   unnest() %>% 
@@ -307,11 +283,30 @@ ROC_t %>%
   theme_bw() + 
   geom_hline(yintercept = 0.5,  color= "gray", size = 1.2) +
   labs(x = NULL, y = 'GROC', fill = NULL)
+ggsave("graphs/GROC_ZC.pdf", width = 10, height = 5)
+ggsave("graphs/GROC_ZC.png", width = 10, height = 5)
 
 
-p %>% 
+# Other indicator...
+ROC_t %>% dplyr::select(-data) %>% unnest() %>% dplyr::select(-nrow_data) %>% 
+  ggplot(aes(zone, pearson, fill = as.character(ciclo))) + # If you want another indicator change this part. 
+  geom_bar(stat = 'identity', position = 'dodge') + 
+  scale_fill_manual( 'cycle' , values = c("gray30", "#008080")) +
+  # ylim(c(0, 1)) + # Change for the correct limits
+  theme_bw() + 
+  geom_hline(yintercept = 0.5,  color= "gray", size = 1.2) +
+  labs(x = NULL, y = NULL, fill = NULL) # Change y = 'new variable'.
+
+ggsave("graphs/other_ZC.pdf", width = 10, height = 5)
+ggsave("graphs/other_ZC.png", width = 10, height = 5)
+
+
+
+# Other graph example...
+Retro_filter%>% 
   nest(-ciclo,-id) %>%
-  mutate(ROC = purrr::map(.x = data, .f = ROC_m)) %>% 
+  mutate(name = glue::glue('{ciclo}_{id}')) %>% 
+  mutate(ROC = purrr::map2(.x = data, .y = name, .f = ROC_m)) %>% 
   dplyr::select(-data) %>% 
   unnest() %>% 
   dplyr::select(-nrow_data) %>% 
@@ -324,41 +319,5 @@ p %>%
   geom_hline(yintercept = 0.5,  color= "gray", size = 1.2) + 
   labs(x = 'Planting date', y = 'GROC', fill = NULL)
 
-
-
-
-
-
-# =-=-=-=-=-=-=-=-=-=-=-=-=
-
-f <- p %>% nest(-zone,  -id) %>% filter(row_number() == 10) %>% dplyr::select(data) %>% unnest()
-
-j <- f  %>% 
-  dplyr::select(-order_date, -month, -year, -pd, -cat, -date, -ciclo) %>% 
-  mutate(dif = HWAM - HWAM.E, dif_two = dif^2, dif_abs = abs(dif))
-
-ind <- j %>% 
-  summarise(mean_obs = mean(HWAM),
-    RMSE = sqrt((1/nrow(.))*sum(dif_two)), 
-    d_a = (1/nrow(.))*sum(dif),
-    d_ap = d_a/mean_obs*100, 
-    pearson = cor(HWAM, HWAM.E), 
-    R_2 = pearson^2, 
-    spearman = cor(HWAM, HWAM.E, method = 'spearman'), 
-    kendall = cor(HWAM, HWAM.E, method = 'kendall'))
-
-ggplot(j, aes(x = HWAM.E, y = HWAM)) + geom_point() + geom_smooth(method = lm, se = FALSE) + theme_bw()
-
-
-sd_d <- j %>% mutate(sd = (dif - ind$d_a)^2/(nrow(.)-1) ) %>% summarise(sd = sqrt(sum(sd)) ) %>% as.numeric()
-
-ind %>% mutate(sd_d = sd_d) %>% dplyr::select(-mean_obs)
-
-
-# RMSE
-# f %>% yardstick::rmse(truth = HWAM,  estimate = HWAM.E)
-# f %>% yardstick::mae(truth = HWAM,  estimate = HWAM.E)
-# yardstick::metrics(f, truth = HWAM,  estimate = HWAM.E)
-
-
-
+ggsave("graphs/other_IdC.pdf", width = 10, height = 5)
+ggsave("graphs/other_IdC.png", width = 10, height = 5)
