@@ -1,7 +1,7 @@
 rm(list = ls()); gc(reset = TRUE)
 # =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 # Made by:     Alejandra Esquivel Arias. 
-# Created in:  Date: 7-2019.
+# Created in:  Date: 8-2019.
 # =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 # graphs Leo's paper.
 
@@ -303,7 +303,7 @@ ggsave("graphs/other_ZC.png", width = 10, height = 5)
 
 
 # Other graph example...
-Retro_filter%>% 
+Retro_filter %>% 
   nest(-ciclo,-id) %>%
   mutate(name = glue::glue('{ciclo}_{id}')) %>% 
   mutate(ROC = purrr::map2(.x = data, .y = name, .f = ROC_m)) %>% 
@@ -321,3 +321,102 @@ Retro_filter%>%
 
 ggsave("graphs/other_IdC.pdf", width = 10, height = 5)
 ggsave("graphs/other_IdC.png", width = 10, height = 5)
+
+
+
+
+# =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+#     _.       _.       _        _        _        _        _        _.   
+#   _( )__   _( )__   _( )__   _( )__   _( )__   _( )__   _( )__   _( )__ 
+# _|     _|_|     _|_|     _|_|     _|_|     _|_|     _|_|     _|_|     _|
+# (_ G _ (_(_ I _ (_(_   _ (_(_ G _ (_(_ R _ (_(_ A _ (_(_ P _ (_(_ H _ (_ 
+#  |_( )__| |_( )__| |_( )__| |_( )__| |_( )__| |_( )__| |_( )__| |_( )__|
+# =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=                                                                           
+
+path <- 'D:/OneDrive - CGIAR/Desktop/Maize_Paper/GI'
+
+GI_retro <- function(data){
+  postitions <- which(is.na(data$Index_1)) - 1
+  
+  data <- data %>%
+    filter(row_number() %in% postitions) %>%
+    filter(X != 'Training', X != 'CURRENT', X != 'X') %>%
+    .[, -(1:4)] %>%
+    mutate(year = 2005:2013)
+  return(data)}
+GI <- read_table2("D:/OneDrive - CGIAR/Desktop/Maize_Paper/GI/Cerete_initial_Jul/GI_M1_Cerete_ASO_month_Jul.txt",  skip = 5)
+
+# list.files(path, recursive = TRUE, pattern = 'GI', full.names = TRUE)[1] %>% read_table2(., skip = 5) %>% GI_retro
+
+all_GI <- list.files(path, recursive = TRUE, pattern = 'GI') %>%
+  basename(.)  %>%
+  str_remove('.txt') %>%
+  tibble() %>%
+  rename(file = '.') %>%
+  mutate(names = list.files(path, recursive = TRUE, pattern = 'GI', full.names = TRUE)) %>%
+  mutate(GI_raw = purrr::map(.x = names, .f = function(.x) read_table2(.x, skip = 5) )) %>%
+  dplyr::select(-names) %>%
+  mutate(GI_retro = purrr::map(.x = GI_raw, .f = GI_retro)) %>%
+  dplyr::select(-GI_raw) %>%
+  unnest
+
+character <- function(character){
+  character<-  character %>%
+    str_split('_') %>%
+    unlist %>%
+    .[c(2:4, 6)] %>%
+    t() %>%
+    as_tibble() %>%
+    set_names('M','place', 'season', 'IC')
+  return(character)}
+
+all_GI <- all_GI %>% mutate(summary_file = purrr::map(.x = file, .f = character)) %>%
+  dplyr::select(-file) %>% unnest %>% mutate(Index_1 = as.numeric(Index_1)) %>%
+  mutate(ciclo = ifelse(IC %in% c("Jan", "Feb",  "Mar"), 'A', 'B' ))
+
+all_GI %>% write_csv('GI_retro.csv')
+
+all_GI <- all_GI %>% group_by(place, ciclo,  M,season) %>%
+  summarise(mean = mean(Index_1), sd = sd(Index_1))
+
+all_GI <- all_GI %>%
+  ungroup() %>%
+  separate(col = M, into = c('M', 'Month'), sep = 'M') %>%
+  dplyr::select(-M)
+
+ggplot(all_GI, aes(x = Month, y = mean)) +
+  geom_bar(stat = 'identity', position = 'dodge',  fill = 'skyblue1', colour = 'black') +
+  geom_errorbar(data = all_GI, aes(ymin = mean-sd, ymax = mean+sd), width=.3 )+
+  labs(y = 'Goodness Index - Mean') +
+  facet_grid(ciclo~place,
+             labeller=labeller(place = as_labeller(c('Cerete' = 'Cordoba','Espinal' = 'Tolima', 'LaUnion'  = 'Valle del Cauca'))) )+
+  theme_bw()
+
+ggsave(filename = 'graphs/GI.png', height = 6.5, width = 10, dpi = 300)
+ggsave(filename = 'graphs/GI.pdf', height = 6.5, width = 10, dpi = 200)
+
+
+#####  Para trabajar la proxima semana. 
+
+
+
+
+# Para el grafico de los roc hay 3 propuestas.
+# Primero calcular un graph con facet_grid donde en el primer panel se incluya el GROC, 
+# en el segundo y tercer panel es el ROC encima de lo normal y debajo. 
+# Hacer el mismo graph que ya teniamos, pero... 
+# Es el graph de barras, solo que le incluimos los puntos con los ROC individuales encima. 
+
+# Para el graph de las fechas de siembra.
+# Cambiar todo a pentadias, es decir agrupar cada 10 dias (penta es 5 pero meh)
+# ademas hacer varios tipos de graph dejando y quitando los hibridos. 
+# Voy a hacer tres tipos de graph para los tipos de hibridos, primero un graph de barras normal
+# El siguiente uno 
+
+# Grafico de barras doble. 
+# data(diamonds )
+# dio2 <- diamonds %>% count(cut, clarity)
+# ggplot(dio2, aes(x=cut, y=n)) +
+#   geom_bar(stat="identity", alpha=0.4) +
+#   geom_bar(stat="identity", aes(fill=clarity), position="dodge")
+
