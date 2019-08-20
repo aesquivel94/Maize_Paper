@@ -10,6 +10,7 @@ library(lubridate)
 library(glue)
 library(cowsay)
 library(pROC)
+library(groupdata2)
 
 # =-=-=-=-=-= Generacion de los graficos para datos Historical. 
 cowsay::say(what = "Generation of graphs for historical data.", by = "rabbit", what_color = "#FF4500", by_color = "red")
@@ -398,9 +399,6 @@ ggsave(filename = 'graphs/GI.pdf', height = 6.5, width = 10, dpi = 200)
 
 #####  Para trabajar la proxima semana. 
 
-
-
-
 # Para el grafico de los roc hay 3 propuestas.
 # Primero calcular un graph con facet_grid donde en el primer panel se incluya el GROC, 
 # en el segundo y tercer panel es el ROC encima de lo normal y debajo. 
@@ -419,4 +417,76 @@ ggsave(filename = 'graphs/GI.pdf', height = 6.5, width = 10, dpi = 200)
 # ggplot(dio2, aes(x=cut, y=n)) +
 #   geom_bar(stat="identity", alpha=0.4) +
 #   geom_bar(stat="identity", aes(fill=clarity), position="dodge")
+
+
+
+
+
+cowsay::say(what = "Retrospective analysis.", by = "smallcat", what_color = "#FF4500", by_color = "red")
+# Leyendo los datos de Leo... a ver... que cambios debo realizar...
+# en que graphs utilizo las simulaciones
+
+test <- rio::import('D:/OneDrive - CGIAR/Desktop/Maize_Paper/Maize_Paper/Datos_Agosto/Groc2.csv' )
+
+test <- test %>% 
+  dplyr::select(-V1)   %>% # Por ahora voy a quitar la variable categoria
+  dplyr::select(TNAM....................., HWAM, year, pd, variety, zone, ciclo, cat, RUNNO, HWAM.E)  %>%
+  separate(TNAM....................., c('month', 'order_date'), sep = '/') %>%
+  mutate(zone = replace(zone, zone == 'LA UNION', 'LA_UNION'), 
+         month = str_remove(month, 'P') %>% as.numeric(), 
+         order_date = as.numeric(order_date)) 
+
+
+
+
+
+
+
+Retro_data %>%
+  nest(-zone, -ciclo,  -variety, -year) %>% 
+  filter(row_number() == 1) %>% 
+  dplyr::select(data) %>% 
+  unnest() %>% 
+  mutate(date = glue::glue('{month}-{order_date}'), id = 1:nrow(.))
+
+
+
+test_filter <- test %>%
+  nest(-zone, -ciclo,  -variety, -year) %>% 
+  mutate(data_mod = purrr::map(.x = data, .f = function(.x){
+    .x %>% mutate(date = glue::glue('{month}-{order_date}')) %>% 
+      groupdata2::group(., 12, method = 'n_dist', col_name = 'grupo') %>% 
+      groupdata2::group(., 99, method = 'n_dist', col_name = 'id') })) %>% 
+  dplyr::select(-data) %>% 
+  unnest() 
+
+
+
+
+# =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+cowsay::say(what = "Indicators: GROC, RMSE, ...", by = "cat", what_color = "#FF4500", by_color = "red")
+
+# This function computes validation indicators. 
+
+#  Probando los indicadores, no estoy segura de como hacerlo con seguridad. 
+test_filter %>%  nest(-zone,  -ciclo)
+
+f <- test_filter %>%  nest(-zone,  -ciclo) %>% filter(row_number() == 2) %>% dplyr::select(data) %>% unnest()
+name <- test_filter %>% nest(-zone,  -ciclo) %>% filter(row_number() == 2) %>% mutate(name = glue::glue('{zone}_{ciclo}')) %>% .$name
+
+ter <- quantile(f$HWAM, c(0.33, 0.66))
+f <- f %>% mutate(cat = case_when( HWAM < ter[1] ~ 'Bajo', 
+                                   HWAM > ter[2] ~ 'Alto', TRUE ~ 'Medio'))
+
+a <- pROC::roc(f %>% filter(cat != 'Alto') %>% .$cat, f %>% filter(cat != 'Alto') %>% .$HWAM.E)$auc %>% as.numeric() %>% round(., 2)
+b <- pROC::roc(f %>% filter(cat != 'Bajo') %>% .$cat, f %>% filter(cat != 'Bajo') %>% .$HWAM.E)$auc %>% as.numeric() %>% round(., 2)
+c <- pROC::roc(f %>% filter(cat != 'Medio') %>% .$cat, f %>% filter(cat != 'Medio') %>% .$HWAM.E)$auc %>% as.numeric() %>% round(., 2)
+d <- mean(c(a, b, c)) %>% round(., 2)
+e <- mean(c(a, b))
+
+cat(glue::glue('No Alto: {a} - No Bajo: {b} - No Medio: {c} - GROC = {d}'))
+all <- tibble(ROC_BM = a, ROC_AM = b,  ROC_AB = c, M_all = d, Mean_AB = e, nrow_data = nrow(f))
+
+
+
 
