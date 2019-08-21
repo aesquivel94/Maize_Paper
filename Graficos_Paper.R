@@ -220,7 +220,7 @@ Acum_Con_by_date <- Datos_p %>%
 
 
 # =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
-cowsay::say(what = "Indicators: GROC, RMSE, ...", by = "cat", what_color = "#FF4500", by_color = "red")
+cowsay::say(what = "Indicators: GROC, RMSE, ...", by = "owl", what_color = "#FF4500", by_color = "red")
 
 # This function computes validation indicators. 
 ROC_m <- function(f, name){
@@ -422,7 +422,7 @@ ggsave(filename = 'graphs/GI.pdf', height = 6.5, width = 10, dpi = 200)
 
 
 
-cowsay::say(what = "Retrospective analysis.", by = "smallcat", what_color = "#FF4500", by_color = "red")
+cowsay::say(what = "Retrospective analysis.", by = "owl", what_color = "#FF4500", by_color = "red")
 # Leyendo los datos de Leo... a ver... que cambios debo realizar...
 # en que graphs utilizo las simulaciones
 
@@ -436,11 +436,7 @@ test <- test %>%
          month = str_remove(month, 'P') %>% as.numeric(), 
          order_date = as.numeric(order_date)) 
 
-
-
-
-
-
+# =-=-=-=-=-=-=-=-=-=-=-=
 
 Retro_data %>%
   nest(-zone, -ciclo,  -variety, -year) %>% 
@@ -467,26 +463,75 @@ test_filter <- test %>%
 cowsay::say(what = "Indicators: GROC, RMSE, ...", by = "cat", what_color = "#FF4500", by_color = "red")
 
 # This function computes validation indicators. 
+ROC_m_rep <- function(f, name){
+  #  Probando los indicadores, no estoy segura de como hacerlo con seguridad. 
+  # test_filter %>%  nest(-zone,  -ciclo)
+  # f <- test_filter %>%  nest(-zone,  -ciclo) %>% filter(row_number() == 2) %>% dplyr::select(data) %>% unnest()
+  # name <- test_filter %>% nest(-zone,  -ciclo) %>% filter(row_number() == 2) %>% mutate(name = glue::glue('{zone}_{ciclo}')) %>% .$name
+  
+  ter <- quantile(f$HWAM, c(0.33, 0.66))
+  f <- f %>% mutate(cat = case_when( HWAM < ter[1] ~ 'Bajo', 
+                                     HWAM > ter[2] ~ 'Alto', TRUE ~ 'Medio'))
+  
+  a <- pROC::roc(f %>% filter(cat != 'Alto') %>% .$cat, f %>% filter(cat != 'Alto') %>% .$HWAM.E)$auc %>% as.numeric() %>% round(., 2)
+  b <- pROC::roc(f %>% filter(cat != 'Bajo') %>% .$cat, f %>% filter(cat != 'Bajo') %>% .$HWAM.E)$auc %>% as.numeric() %>% round(., 2)
+  c <- pROC::roc(f %>% filter(cat != 'Medio') %>% .$cat, f %>% filter(cat != 'Medio') %>% .$HWAM.E)$auc %>% as.numeric() %>% round(., 2)
+  d <- mean(c(a, b, c)) %>% round(., 2)
+  e <- mean(c(a, b))
+  
+  # cat(glue::glue('No Alto: {a} - No Bajo: {b} - No Medio: {c} - GROC = {d}'))
+  all <- tibble(ROC_BM = a, ROC_AM = b,  ROC_AB = c, M_all = d, Mean_AB = e, nrow_data = nrow(f))
+  
+  return(all)}
 
-#  Probando los indicadores, no estoy segura de como hacerlo con seguridad. 
-test_filter %>%  nest(-zone,  -ciclo)
+# Table with indicators. 
+ROC_tf <- test_filter%>% 
+  nest(-zone,  -ciclo) %>% # if you want other filters chage this line
+  mutate(name = glue::glue('{zone}_{ciclo}')) %>% # and this line
+  mutate(ROC = purrr::map2(.x = data, .y = name, .f = ROC_m_rep))
 
-f <- test_filter %>%  nest(-zone,  -ciclo) %>% filter(row_number() == 2) %>% dplyr::select(data) %>% unnest()
-name <- test_filter %>% nest(-zone,  -ciclo) %>% filter(row_number() == 2) %>% mutate(name = glue::glue('{zone}_{ciclo}')) %>% .$name
 
-ter <- quantile(f$HWAM, c(0.33, 0.66))
-f <- f %>% mutate(cat = case_when( HWAM < ter[1] ~ 'Bajo', 
-                                   HWAM > ter[2] ~ 'Alto', TRUE ~ 'Medio'))
 
-a <- pROC::roc(f %>% filter(cat != 'Alto') %>% .$cat, f %>% filter(cat != 'Alto') %>% .$HWAM.E)$auc %>% as.numeric() %>% round(., 2)
-b <- pROC::roc(f %>% filter(cat != 'Bajo') %>% .$cat, f %>% filter(cat != 'Bajo') %>% .$HWAM.E)$auc %>% as.numeric() %>% round(., 2)
-c <- pROC::roc(f %>% filter(cat != 'Medio') %>% .$cat, f %>% filter(cat != 'Medio') %>% .$HWAM.E)$auc %>% as.numeric() %>% round(., 2)
-d <- mean(c(a, b, c)) %>% round(., 2)
-e <- mean(c(a, b))
+af <- ROC_tf %>% 
+  dplyr::select(-data) %>% 
+  unnest() %>% 
+  dplyr::select(-nrow_data) 
 
-cat(glue::glue('No Alto: {a} - No Bajo: {b} - No Medio: {c} - GROC = {d}'))
-all <- tibble(ROC_BM = a, ROC_AM = b,  ROC_AB = c, M_all = d, Mean_AB = e, nrow_data = nrow(f))
 
+
+# Aqui falta crear los labels
+af %>% 
+  dplyr::select(-ROC_AB) %>% 
+  gather(type, value, -zone, -ciclo, -name) %>% 
+  ggplot(aes(zone, value, fill = as.character(ciclo))) +
+  geom_bar(stat = 'identity', position = 'dodge') +
+  facet_grid(~type) + 
+  ylim(c(0, 1)) +
+  scale_fill_manual( 'cycle' , values = c("gray30", "#008080")) +
+  theme_bw() + 
+  geom_hline(yintercept = 0.5,  color= "gray", size = 1.2) +
+  labs(x = NULL, y = 'ROC', fill = NULL)
+
+
+
+
+
+af1 <- af %>% 
+  dplyr::select(-M_all)  %>% 
+  gather(type, value, -zone, -ciclo, -name)
+
+
+
+
+
+ggplot() +
+  geom_bar( data = af, aes(zone, M_all, fill = as.character(ciclo)) ,stat = 'identity', position = 'dodge', alpha = 0.6)  + 
+  geom_point(data = af1,  aes(zone, value, colour = as.character(ciclo), shape = type), size = 2, position=position_jitter(width =.15)) + 
+  ylim(c(0, 1)) +
+  scale_fill_manual( 'cycle' , values = c("gray30", "#008080")) +
+  scale_colour_manual( 'cycle' , values = c("gray30", "#008080")) +
+  theme_bw() + 
+  geom_hline(yintercept = 0.5,  color= "gray", size = 1.2)
 
 
 
