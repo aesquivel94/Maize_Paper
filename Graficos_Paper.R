@@ -499,19 +499,25 @@ af <- ROC_tf %>%
 
 
 
-# Aqui falta crear los labels
+# c('Mean ROC(above-below)', 'ROC(above-below)', 'ROC(above-normal)', 'ROC(below-normal)')
+
+ROC_label <- as_labeller(c('M_all' = 'GROC', 'Mean_AB' = 'Mean ROC(above-below)', 'ROC_AM' = 'ROC(above-normal)', 'ROC_BM' = 'ROC(below-normal)'))
+
+# Ultima idea para los GROC.
 af %>% 
   dplyr::select(-ROC_AB) %>% 
   gather(type, value, -zone, -ciclo, -name) %>% 
   ggplot(aes(zone, value, fill = as.character(ciclo))) +
   geom_bar(stat = 'identity', position = 'dodge') +
-  facet_grid(~type) + 
+  facet_grid(~type, labeller = labeller(type = ROC_label) ) + 
   ylim(c(0, 1)) +
   scale_fill_manual( 'cycle' , values = c("gray30", "#008080")) +
   theme_bw() + 
   geom_hline(yintercept = 0.5,  color= "gray", size = 1.2) +
-  labs(x = NULL, y = 'ROC', fill = NULL)
+  labs(x = NULL, y = 'AUC', fill = NULL)
 
+ggsave("graphs/GROC_ZC.pdf", width = 10, height = 5)
+ggsave("graphs/GROC_ZC.png", width = 10, height = 5)
 
 
 
@@ -521,17 +527,39 @@ af1 <- af %>%
   gather(type, value, -zone, -ciclo, -name)
 
 
-
-
-
+# Segunda mejor posibilidad para los ROC.
 ggplot() +
   geom_bar( data = af, aes(zone, M_all, fill = as.character(ciclo)) ,stat = 'identity', position = 'dodge', alpha = 0.6)  + 
-  geom_point(data = af1,  aes(zone, value, colour = as.character(ciclo), shape = type), size = 2, position=position_jitter(width =.15)) + 
+  geom_point(data = af1,  aes(zone, value, colour = as.character(ciclo), shape = type, group = as.character(ciclo)), size = 3.3,  position = position_dodge(width = 1)) + 
   ylim(c(0, 1)) +
-  scale_fill_manual( 'cycle' , values = c("gray30", "#008080")) +
-  scale_colour_manual( 'cycle' , values = c("gray30", "#008080")) +
+  scale_fill_manual( 'Cycle' , values = c("gray30", "#008080")) +
+  scale_colour_manual( 'Cycle' , values = c("gray30", "#008080")) + 
+  scale_shape(name = NULL, solid = TRUE, 
+              labels = c('Mean ROC(above-below)', 'ROC(above-below)', 'ROC(above-normal)', 'ROC(below-normal)'))+
   theme_bw() + 
-  geom_hline(yintercept = 0.5,  color= "gray", size = 1.2)
+  geom_hline(yintercept = 0.5,  color= "gray", size = 1.2) + 
+  labs(x = NULL, y = 'AUC', fill = NULL) +
+  theme(legend.position = "top", legend.box = "vertical")
+
+
+ggsave("graphs/GROC_ZC2.pdf", width = 8, height = 7)
+ggsave("graphs/GROC_ZC2.png", width = 8, height = 7)  
 
 
 
+# Mejor posibilidad para los ROC. 
+ggplot() +
+  geom_bar( data = af, aes(zone, M_all, fill = as.character(ciclo)) ,stat = 'identity', position = 'dodge', alpha = 0.6)  + 
+  geom_jitter(data = af1,  aes(zone, value, colour = as.character(ciclo), shape = type, group = as.character(ciclo)),  position = position_jitterdodge(), size = 3.3) + 
+  ylim(c(0, 1)) +
+  scale_fill_manual( 'Cycle' , values = c("gray30", "#008080")) +
+  scale_colour_manual( 'Cycle' , values = c("gray30", "#008080")) + 
+  scale_shape(name = NULL, solid = TRUE, 
+              labels = c('Mean ROC(above-below)', 'ROC(above-below)', 'ROC(above-normal)', 'ROC(below-normal)'))+
+  theme_bw() + 
+  geom_hline(yintercept = 0.5,  color= "gray", size = 1.2) + 
+  labs(x = NULL, y = 'AUC', fill = NULL) +
+  theme(legend.position = "top", legend.box = "vertical")
+
+ggsave("graphs/GROC_ZC1.pdf", width = 8, height = 7)
+ggsave("graphs/GROC_ZC1.png", width = 8, height = 7)  
