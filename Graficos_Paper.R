@@ -563,3 +563,67 @@ ggplot() +
 
 ggsave("graphs/GROC_ZC1.pdf", width = 8, height = 7)
 ggsave("graphs/GROC_ZC1.png", width = 8, height = 7)  
+
+
+
+
+
+
+
+
+# =-=-=-=-=-=-=-=-=-=-=-=
+# =-=-=- Order cultivar
+# =-=-=-=-=-=-=-=-=-=-=-=
+
+
+
+
+# This function make a cultivar order...
+cultivar_order <- function(data){
+  data <- test_filter  %>%  dplyr::select(-cat) %>% nest(-zone, -year, -ciclo, -date) %>%
+    filter(row_number() == 100) %>% dplyr::select(data) %>% unnest()
+  
+  obs <- data %>% 
+    dplyr::select(variety, HWAM) %>% 
+    unique() %>% 
+    arrange(desc(HWAM)) %>% 
+    slice(c(1, n())) %>% 
+    mutate(max_min = 1:2)
+  
+  sim <- data %>% 
+    dplyr::select(variety, RUNNO, HWAM.E) %>% 
+    nest(-RUNNO) %>% 
+    mutate(data_f = purrr::map(data, .f = function(.x){.x %>% arrange(desc(HWAM.E)) %>% slice(c(1, n())) %>% mutate(max_min = 1:2) })) %>% 
+    dplyr::select(-data) %>% 
+    unnest() %>% 
+    group_by(max_min, variety) %>% 
+    summarise(n = n()/99 * 100) %>% 
+    ungroup()
+  
+  max <- filter(sim, max_min == 1, variety == obs$variety[1])
+  min <- filter(sim, max_min == 2, variety == obs$variety[2])
+  NULL_data <- tibble(max_min = 0, variety = NA_character_, n = NA_real_)
+  
+  max_min <- if(nrow(max) == 1  &  nrow(min) == 1){bind_rows(max, min)} else if(nrow(max) == 0  &  nrow(min) == 1){
+    bind_rows(NULL_data, min) } else if(nrow(max) == 1  &  nrow(min) == 0){
+      bind_rows(max, NULL_data)} else if(nrow(max) == 0  &  nrow(min) == 0){bind_rows(NULL_data, NULL_data)}
+  
+  return(max_min)}
+
+
+
+tictoc::tic()
+data_cultivar <- test_filter  %>%
+  dplyr::select(-cat) %>% 
+  nest(-zone, -year, -ciclo, -date, -id) %>% 
+  mutate(best_worst = purrr::map(.x = data, .f = cultivar_order)) 
+tictoc::toc() # 3.12 min
+
+
+data_cultivar %>% 
+  dplyr::select(-data) %>% 
+  unnest()
+
+
+
+
