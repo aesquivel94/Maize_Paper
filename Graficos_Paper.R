@@ -11,6 +11,8 @@ library(glue)
 library(cowsay)
 library(pROC)
 library(groupdata2)
+library(future)
+library(furrr)
 
 # =-=-=-=-=-= Generacion de los graficos para datos Historical. 
 cowsay::say(what = "Generation of graphs for historical data.", by = "rabbit", what_color = "#FF4500", by_color = "red")
@@ -576,54 +578,76 @@ ggsave("graphs/GROC_ZC1.png", width = 8, height = 7)
 # =-=-=-=-=-=-=-=-=-=-=-=
 
 
-
+# =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+cowsay::say(what = "Indicators: GROC, RMSE, ...", by = "smallcat", what_color = "#FF4500", by_color = "red")
 
 # This function make a cultivar order...
 cultivar_order <- function(data){
-  data <- test_filter  %>%  dplyr::select(-cat) %>% nest(-zone, -year, -ciclo, -date) %>%
-    filter(row_number() == 100) %>% dplyr::select(data) %>% unnest()
+  # data <- test_filter  %>%  dplyr::select(-cat) %>% nest(-zone, -year, -ciclo, -date) %>%
+  # filter(row_number() == 100) %>% dplyr::select(data) %>% unnest()
   
-  obs <- data %>% 
-    dplyr::select(variety, HWAM) %>% 
-    unique() %>% 
-    arrange(desc(HWAM)) %>% 
-    slice(c(1, n())) %>% 
-    mutate(max_min = 1:2)
+  obs <- data %>% dplyr::select(variety, HWAM) %>% unique() %>% 
+    arrange(desc(HWAM)) %>% slice(c(1, n())) %>% mutate(max_min = 1:2)
   
-  sim <- data %>% 
-    dplyr::select(variety, RUNNO, HWAM.E) %>% 
-    nest(-RUNNO) %>% 
+  sim <- data %>% dplyr::select(variety, RUNNO, HWAM.E) %>% nest(-RUNNO) %>% 
     mutate(data_f = purrr::map(data, .f = function(.x){.x %>% arrange(desc(HWAM.E)) %>% slice(c(1, n())) %>% mutate(max_min = 1:2) })) %>% 
-    dplyr::select(-data) %>% 
-    unnest() %>% 
-    group_by(max_min, variety) %>% 
-    summarise(n = n()/99 * 100) %>% 
-    ungroup()
+    dplyr::select(-data) %>% unnest() %>% group_by(max_min, variety) %>%  
+    summarise(n = n()/99 * 100) %>% ungroup()
   
   max <- filter(sim, max_min == 1, variety == obs$variety[1])
   min <- filter(sim, max_min == 2, variety == obs$variety[2])
-  NULL_data <- tibble(max_min = 0, variety = NA_character_, n = NA_real_)
   
-  max_min <- if(nrow(max) == 1  &  nrow(min) == 1){bind_rows(max, min)} else if(nrow(max) == 0  &  nrow(min) == 1){
-    bind_rows(NULL_data, min) } else if(nrow(max) == 1  &  nrow(min) == 0){
-      bind_rows(max, NULL_data)} else if(nrow(max) == 0  &  nrow(min) == 0){bind_rows(NULL_data, NULL_data)}
+  max_min <- bind_rows(max, min)
+  
+  max_min <-  if(nrow(max_min) == 1){
+    bind_rows(max_min, tibble(max_min = 0, variety = NA_character_, n = NA_real_))    
+  }else if(nrow(max_min) == 0){
+    tibble(max_min = rep(0, 2), variety = NA_character_, n = NA_real_)
+  }else if(nrow(max_min) == 2){bind_rows(max, min)}
   
   return(max_min)}
 
 
 
+cores <- parallel::detectCores() - 1
+plan(cluster, workers = cores)
+
 tictoc::tic()
-data_cultivar <- test_filter  %>%
-  dplyr::select(-cat) %>% 
-  nest(-zone, -year, -ciclo, -date, -id) %>% 
-  mutate(best_worst = purrr::map(.x = data, .f = cultivar_order)) 
-tictoc::toc() # 3.12 min
+cultivar <- test_filter  %>%
+  dplyr::select(-cat) %>%
+  nest(-zone, -year, -ciclo, -date, -grupo) %>%
+  # filter(row_number() < 101) %>% #vamos a dejar todo montado... por ahora.
+  mutate(best_worst = furrr::future_map(.x = data, .f = cultivar_order) )
+tictoc::toc() # 3.25 minutos.
+
+plan(sequential) # 50.64 sec
 
 
-data_cultivar %>% 
+# save files. 
+cultivar %>% 
   dplyr::select(-data) %>% 
-  unnest()
+  unnest() %>% 
+  mutate(max_min_names = case_when(max_min == 1 ~ 'Max', 
+                                   max_min == 2 ~ 'Min', 
+                                   TRUE ~ as.character(max_min))) %>% 
+  write_csv('D:/OneDrive - CGIAR/Desktop/Maize_Paper/Maize_Paper/cultivar_order.csv')
 
 
+# Graphs tipo
+C <- as_labeller(c('1' = 'Cycle 1', '2' = 'Cycle 2'))
+Z <- as_labeller(c("CERETE" = 'Cereté (Córdoba)', "ESPINAL" = 'El Espinal (Tolima)',  "UNION" = 'La Unión (Valle del Cauca)'))
 
+cultivar %>% 
+  dplyr::select(-data) %>% 
+  unnest() %>% 
+  filter(max_min == 1) %>% 
+  ggplot(aes(x = grupo, y = n/9, fill = variety)) + 
+  geom_bar(stat = 'identity', alpha = 0.7) +
+  scale_fill_viridis_d(direction = -1) + 
+  facet_grid(ciclo ~ zone, labeller = labeller(ciclo = C,  zone = Z)) +
+  theme_bw() +
+  labs(x = 'Planting dates', y = 'Percentage', fill = 'Variety')
+
+ggsave(filename = 'graphs/Cultivar2.png', height = 6.5, width = 10, dpi = 300)
+ggsave(filename = 'graphs/Cultivar2.pdf', height = 6.5, width = 10, dpi = 200)
 
