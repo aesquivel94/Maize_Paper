@@ -651,3 +651,215 @@ cultivar %>%
 ggsave(filename = 'graphs/Cultivar2.png', height = 6.5, width = 10, dpi = 300)
 ggsave(filename = 'graphs/Cultivar2.pdf', height = 6.5, width = 10, dpi = 200)
 
+
+
+
+# --------------------------------------------------------------------------------------
+
+
+
+
+# data <- test_filter  %>%  dplyr::select(-cat) %>% nest(-zone, -year, -ciclo, -date) %>%
+# filter(row_number() == 100) %>% dplyr::select(data) %>% unnest()
+
+
+
+
+
+
+
+
+
+
+rm(list = ls()); gc(reset = TRUE)
+# =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+# Made by:     Alejandra Esquivel Arias. 
+# Created in:  Date: 7-2019.
+# =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+# graphs Leo's paper.
+
+library(tidyverse)
+library(lubridate)
+library(glue)
+library(cowsay)
+library(pROC)
+library(future)
+library(furrr)
+
+
+cowsay::say(what = "Retrospective analysis.", by = "owl", what_color = "#FF4500", by_color = "red")
+# Leyendo los datos de Leo... a ver... que cambios debo realizar...
+# en que graphs utilizo las simulaciones
+
+test <- rio::import('D:/OneDrive - CGIAR/Desktop/Maize_Paper/Maize_Paper/Datos_Agosto/Groc2.csv' )
+
+test <- test %>% 
+  dplyr::select(-V1)   %>% # Por ahora voy a quitar la variable categoria
+  dplyr::select(TNAM....................., HWAM, year, pd, variety, zone, ciclo, cat, RUNNO, HWAM.E)  %>%
+  separate(TNAM....................., c('month', 'order_date'), sep = '/') %>%
+  mutate(zone = replace(zone, zone == 'LA UNION', 'LA_UNION'), 
+         month = str_remove(month, 'P') %>% as.numeric(), 
+         order_date = as.numeric(order_date)) 
+
+# =-=-=-=-=-=-=-=-=-=-=-=
+
+# Retro_data %>%
+#   nest(-zone, -ciclo,  -variety, -year) %>% 
+#   filter(row_number() == 1) %>% 
+#   dplyr::select(data) %>% 
+#   unnest() %>% 
+#   mutate(date = glue::glue('{month}-{order_date}'), id = 1:nrow(.))
+
+test_filter <- test %>%
+  nest(-zone, -ciclo,  -variety, -year) %>% 
+  mutate(data_mod = purrr::map(.x = data, .f = function(.x){
+    .x %>% mutate(date = glue::glue('{month}-{order_date}')) %>% 
+      groupdata2::group(., 12, method = 'n_dist', col_name = 'grupo') %>% 
+      groupdata2::group(., 99, method = 'n_dist', col_name = 'id') })) %>% 
+  dplyr::select(-data) %>% 
+  unnest() 
+
+
+
+
+# =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+cowsay::say(what = "Indicators: GROC, RMSE, ...", by = "smallcat", what_color = "#FF4500", by_color = "red")
+
+# This function make a cultivar order...
+# cultivar_order <- function(data){
+#   # data <- test_filter  %>%  dplyr::select(-cat) %>% nest(-zone, -year, -ciclo, -date) %>%
+#   # filter(row_number() == 100) %>% dplyr::select(data) %>% unnest()
+#   
+#   obs <- data %>% dplyr::select(variety, HWAM) %>% unique() %>% 
+#     arrange(desc(HWAM)) %>% slice(c(1, n())) %>% mutate(max_min = 1:2)
+#   
+#   sim <- data %>% dplyr::select(variety, RUNNO, HWAM.E) %>% nest(-RUNNO) %>% 
+#     mutate(data_f = purrr::map(data, .f = function(.x){.x %>% arrange(desc(HWAM.E)) %>% slice(c(1, n())) %>% mutate(max_min = 1:2) })) %>% 
+#     dplyr::select(-data) %>% unnest() %>% group_by(max_min, variety) %>%  
+#     summarise(n = n()/99 * 100) %>% ungroup()
+# 
+#   max <- filter(sim, max_min == 1, variety == obs$variety[1])
+#   min <- filter(sim, max_min == 2, variety == obs$variety[2])
+#   
+#   max_min <- bind_rows(max, min)
+#  
+#   max_min <-  if(nrow(max_min) == 1){
+#     bind_rows(max_min, tibble(max_min = 0, variety = NA_character_, n = NA_real_))    
+#   }else if(nrow(max_min) == 0){
+#     tibble(max_min = rep(0, 2), variety = NA_character_, n = NA_real_)
+#   }else if(nrow(max_min) == 2){bind_rows(max, min)}
+#   
+# return(max_min)}
+
+# cores <- parallel::detectCores() - 1
+# plan(cluster, workers = cores)
+# 
+# tictoc::tic()
+# cultivar <- test_filter  %>%
+#   dplyr::select(-cat) %>%
+#   nest(-zone, -year, -ciclo, -date, -grupo) %>%
+#   # filter(row_number() < 101) %>% #vamos a dejar todo montado... por ahora.
+#   mutate(best_worst = furrr::future_map(.x = data, .f = cultivar_order) )
+# tictoc::toc() # 3.25 minutos.
+# 
+# plan(sequential) # 50.64 sec
+
+
+# save files. 
+# cultivar %>% 
+#   dplyr::select(-data) %>% 
+#   unnest() %>% 
+#   mutate(max_min_names = case_when(max_min == 1 ~ 'Max', 
+#                                    max_min == 2 ~ 'Min', 
+#                                    TRUE ~ as.character(max_min))) %>% 
+#   write_csv('D:/OneDrive - CGIAR/Desktop/Maize_Paper/Maize_Paper/cultivar_order.csv')
+
+
+# Graphs tipo
+C <- as_labeller(c('1' = 'Cycle 1', '2' = 'Cycle 2'))
+Z <- as_labeller(c("CERETE" = 'Cereté (Córdoba)', "ESPINAL" = 'El Espinal (Tolima)',  "UNION" = 'La Unión (Valle del Cauca)'))
+
+# cultivar %>% 
+#   dplyr::select(-data) %>% 
+#   unnest() %>% 
+#   filter(max_min == 1) %>% 
+#   ggplot(aes(x = grupo, y = n/9, fill = variety)) + 
+#   geom_bar(stat = 'identity', alpha = 0.7) +
+#   scale_fill_viridis_d(direction = -1) + 
+#   facet_grid(ciclo ~ zone, labeller = labeller(ciclo = C,  zone = Z)) +
+#   theme_bw() +
+#   labs(x = 'Planting dates', y = 'Percentage', fill = 'Variety')
+# 
+# ggsave(filename = 'graphs/Cultivar2.png', height = 6.5, width = 10, dpi = 300)
+# ggsave(filename = 'graphs/Cultivar2.pdf', height = 6.5, width = 10, dpi = 200)
+
+
+
+# --------------------------------------------------------------------------------------
+
+
+# pentaday <- function(data){
+# data1 <- test_filter  %>%  dplyr::select(-cat) %>% nest(-zone, -year, -ciclo) %>% 
+#         dplyr::select(data) %>% filter(row_number() == 1) %>% unnest()
+# 
+# data1 %>% dplyr::select(variety, month, order_date, HWAM, pd, grupo) %>% unique()
+
+
+
+
+
+
+max_hwam <- function(data2){
+  
+  # data2 <-  test_filter  %>%  dplyr::select(-cat) %>% nest(-zone, -year, -ciclo, -order_date ,-date, -id) %>%
+  #   dplyr::select(data) %>% filter(row_number() == 1) %>% unnest()
+  
+  obs <- data2 %>%
+    dplyr::select(variety, HWAM) %>% 
+    unique() %>% 
+    arrange(desc(HWAM)) %>% 
+    slice(1) %>% 
+    mutate(type = 'obs')
+  
+  forecast <- data2 %>% 
+    dplyr::select( -pd, -HWAM) %>% 
+    group_by(variety) %>%
+    summarise(HWAM.E = max(HWAM.E)) %>% 
+    arrange(desc(HWAM.E)) %>% 
+    slice(1)  %>% 
+    mutate(type = 'forecast') %>% 
+    rename('HWAM' = 'HWAM.E')
+  
+  all <- bind_rows(obs, forecast)
+  return(all)}
+
+data2 <- test_filter  %>%  
+  dplyr::select(-cat) %>% 
+  # nest(-zone, -year, -ciclo, -order_date ,-date, -id) %>% 
+  nest(-zone, -year, -ciclo, -order_date ,-date, -grupo) %>% 
+  mutate(test = purrr::map(.x = data, .f = max_hwam)) 
+
+
+
+data2 <- data2 %>% 
+  dplyr::select(-data) %>% 
+  unnest() %>% 
+  nest(-zone, -year, -ciclo, -type) %>% 
+  mutate(max = purrr::map(.x = data, .f = function(x){ x %>% arrange(desc(HWAM)) %>% slice(1)})) %>% 
+  dplyr::select(-data) 
+
+
+a <- data2 %>% 
+  unnest() %>%
+  # group_by(year, zone, ciclo)
+  nest(-year, -zone, -ciclo) %>%
+  dplyr::select(data) %>% 
+  filter(row_number() == 1) %>% 
+  unnest()
+
+
+a[1, ] - a[2, ]
+
+
+
+
