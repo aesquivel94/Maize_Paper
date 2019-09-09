@@ -421,9 +421,6 @@ ggsave(filename = 'graphs/GI.pdf', height = 6.5, width = 10, dpi = 200)
 #   geom_bar(stat="identity", aes(fill=clarity), position="dodge")
 
 
-
-
-
 cowsay::say(what = "Retrospective analysis.", by = "owl", what_color = "#FF4500", by_color = "red")
 # Leyendo los datos de Leo... a ver... que cambios debo realizar...
 # en que graphs utilizo las simulaciones
@@ -484,6 +481,27 @@ ROC_m_rep <- function(f, name){
   # cat(glue::glue('No Alto: {a} - No Bajo: {b} - No Medio: {c} - GROC = {d}'))
   all <- tibble(ROC_BM = a, ROC_AM = b,  ROC_AB = c, M_all = d, Mean_AB = e, nrow_data = nrow(f))
   
+  normal_metrics <- f %>% 
+    filter(complete.cases(.)) %>%
+    summarise(n = n(),
+              r_pearson = cor(HWAM, HWAM.E, method = c("pearson")),
+              r_spearman = cor(HWAM, HWAM.E, method = c("spearman")), 
+              r_kendall = cor(HWAM, HWAM.E, method = c("kendall")),
+              RMSE = sqrt(mean((HWAM.E - HWAM)^2, na.rm = T)),
+              NRMSE = RMSE/mean(HWAM, na.rm = T),
+              MAE = sum(abs(HWAM.E - HWAM)/n),
+              MBE = sum((HWAM.E - HWAM))/n,
+              d = 1 - ((sum((HWAM.E - HWAM)^2, na.rm = T))/
+                         sum((abs(HWAM.E - mean(HWAM, na.rm = T)) +
+                                abs(HWAM - mean(HWAM, na.rm = T)))^2, na.rm = T)),
+              NSE = 1 - ((sum((HWAM.E - HWAM)^2, na.rm = T))/
+                           sum((HWAM - mean(HWAM, na.rm = T))^2, na.rm = T)),
+              rsq_2 = summary(lm(HWAM.E ~ HWAM))$r.squared)
+  
+  
+  all <- bind_cols(all, normal_metrics)
+  
+  
   return(all)}
 
 # Table with indicators. 
@@ -492,18 +510,18 @@ ROC_tf <- test_filter%>%
   mutate(name = glue::glue('{zone}_{ciclo}')) %>% # and this line
   mutate(ROC = purrr::map2(.x = data, .y = name, .f = ROC_m_rep))
 
-
-
 af <- ROC_tf %>% 
   dplyr::select(-data) %>% 
   unnest() %>% 
   dplyr::select(-nrow_data) 
 
-
-
-# c('Mean ROC(above-below)', 'ROC(above-below)', 'ROC(above-normal)', 'ROC(below-normal)')
-
 ROC_label <- as_labeller(c('M_all' = 'GROC', 'Mean_AB' = 'Mean ROC(above-below)', 'ROC_AM' = 'ROC(above-normal)', 'ROC_BM' = 'ROC(below-normal)'))
+
+
+j <- af %>% dplyr::select(-n)
+
+af <- af %>% 
+  dplyr::select(zone, ciclo, name,  ROC_BM, ROC_AM, ROC_AB, M_all, Mean_AB)
 
 # Ultima idea para los GROC.
 af %>% 
@@ -520,8 +538,6 @@ af %>%
 
 ggsave("graphs/GROC_ZC.pdf", width = 10, height = 5)
 ggsave("graphs/GROC_ZC.png", width = 10, height = 5)
-
-
 
 
 af1 <- af %>% 
@@ -569,14 +585,13 @@ ggsave("graphs/GROC_ZC1.png", width = 8, height = 7)
 
 
 
-
+j %>% write_csv('Indicadores.csv')
 
 
 
 # =-=-=-=-=-=-=-=-=-=-=-=
 # =-=-=- Order cultivar
 # =-=-=-=-=-=-=-=-=-=-=-=
-
 
 # =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 cowsay::say(what = "Indicators: GROC, RMSE, ...", by = "smallcat", what_color = "#FF4500", by_color = "red")
@@ -606,8 +621,6 @@ cultivar_order <- function(data){
   }else if(nrow(max_min) == 2){bind_rows(max, min)}
   
   return(max_min)}
-
-
 
 cores <- parallel::detectCores() - 1
 plan(cluster, workers = cores)
@@ -640,7 +653,7 @@ Z <- as_labeller(c("CERETE" = 'Cereté (Córdoba)', "ESPINAL" = 'El Espinal (Tol
 cultivar %>% 
   dplyr::select(-data) %>% 
   unnest() %>% 
-  filter(max_min == 1) %>% 
+  filter(max_min == 2) %>% 
   ggplot(aes(x = grupo, y = n/9, fill = variety)) + 
   geom_bar(stat = 'identity', alpha = 0.7) +
   scale_fill_viridis_d(direction = -1) + 
@@ -648,8 +661,8 @@ cultivar %>%
   theme_bw() +
   labs(x = 'Planting dates', y = 'Percentage', fill = 'Variety')
 
-ggsave(filename = 'graphs/Cultivar2.png', height = 6.5, width = 10, dpi = 300)
-ggsave(filename = 'graphs/Cultivar2.pdf', height = 6.5, width = 10, dpi = 200)
+ggsave(filename = 'graphs/Cultivar_min.png', height = 6.5, width = 10, dpi = 300)
+ggsave(filename = 'graphs/Cultivar_min.pdf', height = 6.5, width = 10, dpi = 200)
 
 
 
@@ -660,17 +673,9 @@ ggsave(filename = 'graphs/Cultivar2.pdf', height = 6.5, width = 10, dpi = 200)
 # --------------------------------------------------------------------------------------
 # --------------------------------------------------------------------------------------
 # --------------------------------------------------------------------------------------
-
-
-
 
 # data <- test_filter  %>%  dplyr::select(-cat) %>% nest(-zone, -year, -ciclo, -date) %>%
 # filter(row_number() == 100) %>% dplyr::select(data) %>% unnest()
-
-
-
-
-
 
 max_hwam <- function(data2){
   
@@ -806,7 +811,6 @@ freq_n <- function(data){
   return(c)}
 
 
-
 data3 <- data2 %>% 
   dplyr::select(-data) %>% 
   unnest() %>% 
@@ -865,7 +869,10 @@ ggsave(filename = 'graphs/sowing_date_type2.pdf', height = 6.5, width = 10, dpi 
 
 
 # Type 3. 
-b <- test %>% 
+b <- test %>%
+  group_by(year, zone, ciclo, decaday) %>% 
+  summarise(freq_n = sum(freq_n)) %>% 
+  ungroup %>% 
   group_by(zone, ciclo, decaday) %>% 
   summarise(mean_freq = median(freq_n, na.rm = TRUE), min_freq = min(freq_n), max_freq = max(freq_n))
 
@@ -912,5 +919,21 @@ ggsave(filename = 'graphs/sowing_date_type5.pdf', height = 4.5, width = 10, dpi 
 
 
 
+# Type 6....
 
+
+test %>% 
+  group_by(year, zone, ciclo, decaday) %>% 
+  summarise(sum_freq = sum(freq_n)) %>% 
+  ggplot(aes(x = decaday, y = as.character(year), fill = sum_freq)) +
+  geom_tile()  +
+  geom_text(aes(label = round(sum_freq, 2))) +
+  scale_fill_gradient(low = "white", high = "#008080", limits = c(0,100))  +
+  labs(x = 'Days', y = 'Year', fill = 'Freq. (%)') +
+  facet_grid(ciclo~zone,  labeller = labeller(ciclo = C,  zone = Z)) +
+  theme_bw()  #+ theme(legend.position = 'top')
+
+
+ggsave(filename = 'graphs/sowing_date_type6.png', height = 5.5, width = 10.5, dpi = 300)
+ggsave(filename = 'graphs/sowing_date_type6.pdf', height = 5.5, width = 10.5, dpi = 200)
 
