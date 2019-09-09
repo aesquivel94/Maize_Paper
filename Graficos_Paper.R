@@ -740,3 +740,177 @@ ggplot(a, aes(x = dec_day)) +
   geom_bar(position = 'dodge') + 
   facet_grid(ciclo ~ zone)
 
+
+
+
+# =-----------------------------------------------------------    
+# Graph to sowing date. 
+# =-----------------------------------------------------------
+
+max_hwam_RUNNO <- function(data2){
+  
+  # data2 <-  test_filter  %>%  dplyr::select(-cat) %>% nest(-zone, -year, -ciclo, -date, -grupo) %>%
+  # dplyr::select(data) %>% filter(row_number() == 1) %>% unnest()
+  
+  obs <- data2 %>%
+    dplyr::select(variety, HWAM) %>% 
+    unique() %>% 
+    arrange(desc(HWAM)) %>% 
+    slice(1) %>% 
+    mutate(type = 'obs', RUNNO = 0) %>% 
+    dplyr::select(-variety)
+  
+  
+  forecast <-  data2 %>%
+    dplyr::select( -pd, -HWAM) %>% 
+    group_by(RUNNO) %>% 
+    summarise(HWAM.E = max(HWAM.E)) %>% 
+    # arrange(desc(HWAM.E)) %>% 
+    # slice(1)  %>% 
+    mutate(type = 'forecast') %>% 
+    rename('HWAM' = 'HWAM.E')
+  
+  all <- bind_rows(obs, forecast)
+  return(all)}
+
+data2 <- test_filter  %>%  
+  dplyr::select(-cat) %>% 
+  # nest(-zone, -year, -ciclo, -order_date ,-date, -id) %>%
+  nest(-zone, -year, -ciclo, -order_date ,-date, -grupo) %>% 
+  mutate(test = purrr::map(.x = data, .f = max_hwam_RUNNO)) 
+
+
+freq_n <- function(data){
+  # test <- data3 %>% filter(row_number() == 1) %>% dplyr::select(data) %>% unnest() %>% mutate(grupo = as.numeric(grupo))
+  
+  a <- data %>% 
+    filter(type == 'obs') %>% 
+    arrange(desc(HWAM)) %>% 
+    slice(1)
+  
+  b <- data %>% 
+    filter(type == 'forecast') %>%
+    nest(-RUNNO) %>% 
+    mutate(new_max = purrr::map(.x = data, .f = function(x){x %>% arrange(desc(HWAM)) %>% slice(1)})) %>%
+    dplyr::select(-data) %>%
+    unnest()
+  
+  c <- b %>%
+    dplyr::select(-type) %>%
+    group_by(order_date, date, grupo) %>%
+    summarise(freq_n = n()/99 * 100, HWAM = mean(HWAM)) %>% 
+    mutate(dif_grupo = abs(grupo - a$grupo)* 5, 
+           dif_order_date = order_date - a$order_date) %>% 
+    ungroup()
+  
+  return(c)}
+
+
+
+data3 <- data2 %>% 
+  dplyr::select(-data) %>% 
+  unnest() %>% 
+  mutate(grupo = as.numeric(grupo)) %>% 
+  nest(-zone, -year, -ciclo) %>% 
+  mutate(freq_n = purrr::map(.x = data, .f = freq_n))
+
+
+
+test <- data3 %>% 
+  dplyr::select(-data) %>% 
+  unnest() %>% 
+  mutate(decaday = case_when(dif_grupo < 10 ~ '[0, 10)', 
+                             10 <= dif_grupo & dif_grupo < 20 ~ '[10, 20)', 
+                             20 <= dif_grupo & dif_grupo < 30 ~ '[20, 30)', 
+                             30 <= dif_grupo & dif_grupo < 40 ~ '[30, 40)', 
+                             40 <= dif_grupo & dif_grupo < 50 ~ '[40, 50)', 
+                             50 <= dif_grupo & dif_grupo <= 60 ~ '[50, 60]'))
+
+
+
+# Type 1. --- only for visualization. 
+ggplot(test, aes(x = decaday, y = freq_n, fill = as.factor(ciclo))) +
+  geom_bar(stat = 'identity', position = 'dodge') +
+  facet_grid(zone~year) +
+  scale_fill_manual( 'Cycle' , values = c("gray30", "#008080")) +
+  scale_colour_manual( 'Cycle' , values = c("gray30", "#008080")) +
+  labs(x = 'days', y = 'frequency (%)', fill = 'Cycle') +
+  ylim(c(0, 100)) +
+  theme_bw() +
+  theme(legend.position = 'top')
+
+
+# Type 2. 
+test %>% 
+  group_by(zone, ciclo, decaday) %>% 
+  summarise(mean_freq = mean(freq_n, na.rm = TRUE)) %>%
+  ggplot() + 
+  geom_bar(aes(x = decaday, y = mean_freq), stat = 'identity' , alpha = 0.6,position = 'dodge') +
+  geom_point(data = test,
+             aes(decaday, freq_n, colour = as.character(year), shape = as.character(year),
+                 group = as.character(year)), size = 3.3) +
+  scale_colour_viridis_d() +
+  scale_shape_manual(values = c(1:9)) + 
+  facet_grid(ciclo ~zone, labeller = labeller(ciclo = C,  zone = Z)) + 
+  ylim(c(0, 100)) +
+  labs(x = 'Days', y = 'Frequency (%)', shape = 'Year', colour = 'Year') + 
+  guides(col = guide_legend(nrow = 1)) + 
+  theme_bw() + 
+  theme(legend.position = 'top')
+
+
+ggsave(filename = 'graphs/sowing_date_type2.png', height = 6.5, width = 10, dpi = 300)
+ggsave(filename = 'graphs/sowing_date_type2.pdf', height = 6.5, width = 10, dpi = 200)
+
+
+
+# Type 3. 
+b <- test %>% 
+  group_by(zone, ciclo, decaday) %>% 
+  summarise(mean_freq = median(freq_n, na.rm = TRUE), min_freq = min(freq_n), max_freq = max(freq_n))
+
+
+ggplot(data = b) + 
+  geom_bar(aes(x = decaday, y = mean_freq, fill = as.factor(ciclo)),  alpha = 0.6,stat = 'identity', position = 'dodge') + 
+  geom_errorbar(aes(x = decaday, ymin = min_freq, ymax = max_freq, colour = as.factor(ciclo)), position = "dodge") + 
+  scale_fill_manual( 'Cycle' , values = c("gray30", "#008080")) +
+  scale_colour_manual( 'Cycle' , values = c("gray30", "#008080")) + 
+  facet_wrap(~zone, , labeller = labeller( zone = Z)) + 
+  labs(x = 'Days', y = 'Frequency (%)', fill = 'Cycle') + 
+  ylim(c(0, 100)) +
+  theme_bw()
+
+ggsave(filename = 'graphs/sowing_date_type3.png', height = 3.5, width = 10, dpi = 300)
+ggsave(filename = 'graphs/sowing_date_type3.pdf', height = 3.5, width = 10, dpi = 200)
+
+# Type 4
+ggplot(data = b) +
+  geom_linerange(aes(x = decaday, ymin = min_freq, ymax = max_freq, colour = as.factor(ciclo)), position = position_dodge(width = 0.5)) +
+  geom_point(aes(x = decaday, y = mean_freq, colour = as.factor(ciclo)) , position = position_dodge(width = 0.5) ) +
+  scale_colour_manual( 'Cycle' , values = c("gray30", "#008080")) + 
+  facet_wrap(~zone, , labeller = labeller( zone = Z)) + 
+  labs(x = 'Days', y = 'Frequency (%)', fill = 'Cycle') + 
+  ylim(c(0, 100)) +
+  theme_bw()
+ggsave(filename = 'graphs/sowing_date_type4.png', height = 3.5, width = 10, dpi = 300)
+ggsave(filename = 'graphs/sowing_date_type4.pdf', height = 3.5, width = 10, dpi = 200)
+
+# Type 5. 
+ggplot() +
+  geom_errorbar(data = b, aes(x = decaday, ymin = min_freq, ymax = max_freq, colour = as.factor(ciclo)), position = position_dodge(width = 0.5)) +
+  geom_point(data = test, aes(decaday, freq_n, colour = as.character(ciclo), shape = as.character(year) ), 
+             position = position_dodge(width = 0.5) ) +
+  scale_colour_manual( 'Cycle' , values = c("gray30", "#008080")) + 
+  facet_wrap(~zone, , labeller = labeller( zone = Z)) + 
+  scale_shape_manual(values = c(1:9)) + 
+  ylim(c(0, 100)) +
+  labs(x = 'Days', y = 'Frequency (%)', fill = 'Cycle', shape = 'Year') + 
+  theme_bw()
+
+ggsave(filename = 'graphs/sowing_date_type5.png', height = 4.5, width = 10, dpi = 300)
+ggsave(filename = 'graphs/sowing_date_type5.pdf', height = 4.5, width = 10, dpi = 200)
+
+
+
+
+
