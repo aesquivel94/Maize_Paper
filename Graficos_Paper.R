@@ -925,11 +925,13 @@ ggsave(filename = 'graphs/sowing_date_type5.pdf', height = 4.5, width = 10, dpi 
 test %>% 
   group_by(year, zone, ciclo, decaday) %>% 
   summarise(sum_freq = sum(freq_n)) %>% 
+  mutate(var = ifelse(sum_freq > 50, 'a', 'b')) %>% 
   ggplot(aes(x = decaday, y = as.character(year), fill = sum_freq)) +
   geom_tile()  +
-  geom_text(aes(label = round(sum_freq, 2))) +
-  scale_fill_gradient(low = "white", high = "#008080", limits = c(0,100))  +
-  labs(x = 'Days', y = 'Year', fill = 'Freq. (%)') +
+  geom_text(aes(label = round(sum_freq, 2), colour =  var), show.legend = FALSE) + # show_guide  = F 
+  scale_fill_gradient(low = "white", high = "#008080", limits = c(0,100)) + 
+  scale_colour_manual(values = c('red', 'black')) +
+  labs(x = 'Days', y = 'Year', fill = 'Freq. (%)', colour = NULL) +
   facet_grid(ciclo~zone,  labeller = labeller(ciclo = C,  zone = Z)) +
   theme_bw()  #+ theme(legend.position = 'top')
 
