@@ -387,16 +387,50 @@ all_GI <- all_GI %>%
   separate(col = M, into = c('M', 'Month'), sep = 'M') %>%
   dplyr::select(-M)
 
-ggplot(all_GI, aes(x = Month, y = mean)) +
-  geom_bar(stat = 'identity', position = 'dodge',  fill = 'skyblue1', colour = 'black') +
-  geom_errorbar(data = all_GI, aes(ymin = mean-sd, ymax = mean+sd), width=.3 )+
-  labs(y = 'Goodness Index - Mean') +
-  facet_grid(ciclo~place,
-             labeller=labeller(place = as_labeller(c('Cerete' = 'Cordoba','Espinal' = 'Tolima', 'LaUnion'  = 'Valle del Cauca'))) )+
+
+# ggplot(all_GI, aes(x = Month, y = mean)) +
+#   geom_bar(stat = 'identity', position = 'dodge', alpha = 0.7, fill = "gray30", colour = 'black') +
+#   geom_errorbar(data = all_GI, aes(ymin = mean-sd, ymax = mean+sd), width=.3 )+
+#   labs(y = 'Goodness Index - Mean') +
+#   ylim(c(-0.04, 0.5)) +
+#   geom_text(aes(label = season), vjust = -2, 
+#             position=position_dodge(width=0.9)) +
+#   facet_grid(ciclo~place,
+#              labeller=labeller(ciclo =  as_labeller(c('A' = 'Season A', 'B' = 'Season B')), place = as_labeller(c('Cerete' = 'Cordoba','Espinal' = 'Tolima', 'LaUnion'  = 'Valle del Cauca'))) )+
+#   theme_bw()
+
+
+max_min <- all_GI %>% arrange(mean) %>% slice(1, n()) %>% pull(mean) 
+
+a_gi <- all_GI %>% 
+  mutate(var = glue::glue('{Month}.{season}')) %>% 
+  filter(ciclo == 'A') %>%
+  ggplot(aes(x = var, y = mean)) +
+  geom_bar(stat = 'identity', position = 'dodge', alpha = 0.7, fill = "gray30", colour = 'black') +
+  geom_errorbar(aes(ymin = mean-sd, ymax = mean+sd), width=.3 )+
+  labs(y = 'Goodness Index - Mean', x = NULL) +
+  ylim(c( max_min[1] - 0.03, max_min[2] + 0.02)) +
+  facet_grid(ciclo~place, scales = 'free_x',
+             labeller=labeller(ciclo =  as_labeller(c('A' = 'Season A', 'B' = 'Season B')), place = as_labeller(c('Cerete' = 'Cordoba','Espinal' = 'Tolima', 'LaUnion'  = 'Valle del Cauca'))) )+
   theme_bw()
 
-ggsave(filename = 'graphs/GI.png', height = 6.5, width = 10, dpi = 300)
-ggsave(filename = 'graphs/GI.pdf', height = 6.5, width = 10, dpi = 200)
+
+b_gi <- all_GI %>% mutate(var = glue::glue('{Month}.{season}')) %>% 
+  filter(ciclo == 'B') %>% ggplot(aes(x = var, y = mean)) +
+  geom_bar(stat = 'identity', position = 'dodge', alpha = 0.7, fill = "gray30", colour = 'black') +
+  geom_errorbar(aes(ymin = mean-sd, ymax = mean+sd), width=.3 )+
+  labs(y = 'Goodness Index - Mean', x = NULL) +
+  ylim(c( max_min[1] - 0.03, max_min[2] + 0.02)) +
+  facet_grid(ciclo~place, scales = 'free_x',
+             labeller=labeller(ciclo =  as_labeller(c('A' = 'Season A', 'B' = 'Season B')), place = as_labeller(c('Cerete' = 'Cordoba','Espinal' = 'Tolima', 'LaUnion'  = 'Valle del Cauca'))) )+
+  theme_bw()
+
+
+f <- gridExtra::grid.arrange(a_gi, b_gi)
+
+ggsave(f, filename = 'graphs/GI.png', height = 6.5, width = 10, dpi = 300)
+ggsave(f, filename = 'graphs/GI.pdf', height = 6.5, width = 10, dpi = 200)
+
 
 
 #####  Para trabajar la proxima semana. 
@@ -437,14 +471,12 @@ test <- test %>%
 
 # =-=-=-=-=-=-=-=-=-=-=-=
 
-Retro_data %>%
-  nest(-zone, -ciclo,  -variety, -year) %>% 
-  filter(row_number() == 1) %>% 
-  dplyr::select(data) %>% 
-  unnest() %>% 
-  mutate(date = glue::glue('{month}-{order_date}'), id = 1:nrow(.))
-
-
+# Retro_data %>%
+#   nest(-zone, -ciclo,  -variety, -year) %>% 
+#   filter(row_number() == 1) %>% 
+#   dplyr::select(data) %>% 
+#   unnest() %>% 
+#   mutate(date = glue::glue('{month}-{order_date}'), id = 1:nrow(.))
 
 test_filter <- test %>%
   nest(-zone, -ciclo,  -variety, -year) %>% 
@@ -454,8 +486,6 @@ test_filter <- test %>%
       groupdata2::group(., 99, method = 'n_dist', col_name = 'id') })) %>% 
   dplyr::select(-data) %>% 
   unnest() 
-
-
 
 
 # =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
@@ -517,7 +547,6 @@ af <- ROC_tf %>%
 
 ROC_label <- as_labeller(c('M_all' = 'GROC', 'Mean_AB' = 'Mean ROC(above-below)', 'ROC_AM' = 'ROC(above-normal)', 'ROC_BM' = 'ROC(below-normal)'))
 
-
 j <- af %>% dplyr::select(-n)
 
 af <- af %>% 
@@ -550,15 +579,15 @@ ggplot() +
   geom_bar( data = af, aes(zone, M_all, fill = as.character(ciclo)) ,stat = 'identity', position = 'dodge', alpha = 0.6)  + 
   geom_point(data = af1,  aes(zone, value, colour = as.character(ciclo), shape = type, group = as.character(ciclo)), size = 3.3,  position = position_dodge(width = 1)) + 
   ylim(c(0, 1)) +
-  scale_fill_manual( 'Cycle' , values = c("gray30", "#008080")) +
-  scale_colour_manual( 'Cycle' , values = c("gray30", "#008080")) + 
+  scale_x_discrete(labels = c('Cereté\n(Córdoba)', 'El Espinal\n(Tolima)', 'La Unión\n(Valle del Cauca)')) +
+  scale_fill_manual( 'Season' , values = c("gray30", "#008080"), labels = c('A', 'B')) +
+  scale_colour_manual( 'Season' , values = c("gray30", "#008080"), labels = c('A', 'B'), guide = FALSE) + 
   scale_shape(name = NULL, solid = TRUE, 
               labels = c('Mean ROC(above-below)', 'ROC(above-below)', 'ROC(above-normal)', 'ROC(below-normal)'))+
   theme_bw() + 
   geom_hline(yintercept = 0.5,  color= "gray", size = 1.2) + 
-  labs(x = NULL, y = 'AUC', fill = NULL) +
-  theme(legend.position = "top", legend.box = "vertical")
-
+  labs(x = NULL, y = 'AUC', fill = 'Season') +
+  theme(legend.position = "top", legend.box = "vertical") 
 
 ggsave("graphs/GROC_ZC2.pdf", width = 8, height = 7)
 ggsave("graphs/GROC_ZC2.png", width = 8, height = 7)  
@@ -647,22 +676,23 @@ cultivar %>%
 
 
 # Graphs tipo
-C <- as_labeller(c('1' = 'Cycle 1', '2' = 'Cycle 2'))
+C <- as_labeller(c('1' = 'Season A', '2' = 'Season B'))
 Z <- as_labeller(c("CERETE" = 'Cereté (Córdoba)', "ESPINAL" = 'El Espinal (Tolima)',  "UNION" = 'La Unión (Valle del Cauca)'))
 
 cultivar %>% 
   dplyr::select(-data) %>% 
   unnest() %>% 
-  filter(max_min == 2) %>% 
+  filter(max_min == 1) %>% 
   ggplot(aes(x = grupo, y = n/9, fill = variety)) + 
   geom_bar(stat = 'identity', alpha = 0.7) +
   scale_fill_viridis_d(direction = -1) + 
   facet_grid(ciclo ~ zone, labeller = labeller(ciclo = C,  zone = Z)) +
   theme_bw() +
+  ylim(c(0, 100)) +
   labs(x = 'Planting dates', y = 'Percentage', fill = 'Variety')
 
-ggsave(filename = 'graphs/Cultivar_min.png', height = 6.5, width = 10, dpi = 300)
-ggsave(filename = 'graphs/Cultivar_min.pdf', height = 6.5, width = 10, dpi = 200)
+ggsave(filename = 'graphs/Cultivar_max.png', height = 6.5, width = 10, dpi = 300)
+ggsave(filename = 'graphs/Cultivar_max.pdf', height = 6.5, width = 10, dpi = 200)
 
 
 
@@ -921,16 +951,34 @@ ggsave(filename = 'graphs/sowing_date_type5.pdf', height = 4.5, width = 10, dpi 
 
 # Type 6....
 
+print.numeric<-function(x, digits = 1) formatC(x, digits = digits, format = "f")
 
-test %>% 
+filter_test_b <- test %>% 
+  group_by(year, zone, ciclo, decaday) %>% 
+  summarise(sum_freq = sum(freq_n) ) %>% 
+  mutate(var = ifelse(sum_freq > 50, 'a', 'b')) %>% 
+  filter(var == 'b') %>%
+  mutate(req = print.numeric(sum_freq) )
+
+filter_test_a <- test %>% 
   group_by(year, zone, ciclo, decaday) %>% 
   summarise(sum_freq = sum(freq_n)) %>% 
   mutate(var = ifelse(sum_freq > 50, 'a', 'b')) %>% 
+  filter(var == 'a') %>% 
+  # mutate(sum_freq = round(sum_freq, 1) ) %>% 
+  mutate(req = print.numeric(sum_freq) )
+
+
+
+test %>% 
+  group_by(year, zone, ciclo, decaday) %>% 
+  summarise(sum_freq = sum(freq_n) ) %>% 
+  mutate(var = ifelse(sum_freq > 50, 'a', 'b')) %>% 
   ggplot(aes(x = decaday, y = as.character(year), fill = sum_freq)) +
   geom_tile()  +
-  geom_text(aes(label = round(sum_freq, 2), colour =  var), show.legend = FALSE) + # show_guide  = F 
-  scale_fill_gradient(low = "white", high = "#008080", limits = c(0,100)) + 
-  scale_colour_manual(values = c('red', 'black')) +
+  geom_text(data = filter_test_b, aes(label = req), size = 3,show.legend = FALSE) +
+  geom_text(data = filter_test_a, aes(label = req), fontface = 'bold',show.legend = FALSE) + # show_guide  = F
+  scale_fill_gradient(low = "white", high = "#008080", limits = c(0,100)) +
   labs(x = 'Days', y = 'Year', fill = 'Freq. (%)', colour = NULL) +
   facet_grid(ciclo~zone,  labeller = labeller(ciclo = C,  zone = Z)) +
   theme_bw()  #+ theme(legend.position = 'top')
@@ -938,4 +986,3 @@ test %>%
 
 ggsave(filename = 'graphs/sowing_date_type6.png', height = 5.5, width = 10.5, dpi = 300)
 ggsave(filename = 'graphs/sowing_date_type6.pdf', height = 5.5, width = 10.5, dpi = 200)
-
