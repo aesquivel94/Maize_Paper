@@ -42,6 +42,45 @@ Historic_fil <- Historical %>%
   dplyr::select(-data) %>% 
   unnest() %>% 
   dplyr::select(year, variety, zone, ciclo, month, id, date, HWAM)
+
+
+# =----------------------------------------------------------------------------------
+
+cowsay::say(what = "Graphs Eliana and S.", by = "frog", what_color = "#FF4500", by_color = "red")
+
+V <- as_labeller(c('A' = 'Season A', 'B' = 'Season B'))
+Z1 <- as_labeller(c("CERETE" = 'Cereté (Córdoba)', "ESPINAL" = 'El Espinal (Tolima)',  "LA_UNION" = 'La Unión (Valle del Cauca)'))
+
+
+Historic_fil %>% 
+  group_by(zone, variety, ciclo, date) %>% 
+  summarise(HWAM = mean(HWAM))  %>%   
+  ggplot(aes(x = date, y = HWAM, colour = variety, group = variety)) + 
+  geom_point() + 
+  geom_line() + 
+  scale_colour_viridis_d() + 
+  facet_wrap(ciclo ~ zone, scales = 'free_x', labeller = labeller(ciclo = V, zone = Z1)) + 
+  labs(x = 'Planting date (month - day)', y = 'Yield Mean (Kg/ha)', colour = 'Variety') + 
+  theme_bw() + 
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+ggsave("graphs/His_a.pdf", width = 10, height = 6)
+ggsave("graphs/His_a.png", width = 10, height = 6)
+
+
+
+# Grafico Eliana - Lizeth ...
+Historic_fil %>% group_by(year,zone) %>%  summarise(rend = mean(HWAM), desv = sd(HWAM)) %>% 
+  ggplot(.,aes(year, rend)) + geom_line()+geom_linerange(aes(ymin=rend-desv, ymax=rend+desv)) + 
+  theme_bw()+ 
+  facet_wrap(. ~ zone, ,nrow = 3,ncol = 1, labeller = labeller(zone = as_labeller(c("CERETE" = 'Cereté (Córdoba)', "ESPINAL" = 'El Espinal (Tolima)',  "LA_UNION" = 'La Unión (Valle del Cauca)'))))+ylab("Yield (Kg/Ha)")+
+  scale_x_continuous("Year", 1980:2013, 1980:2013)+ theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+ggsave("Figure_2.pdf", width = 10, height = 5)
+ggsave("Figure_2.png", width = 10, height = 5)
+
+
+# =----------------------------------------------------------------------------------
   
 # Historical coefficient of variation.
 cv_Data <- Historic_fil %>% 
@@ -82,8 +121,8 @@ ggplot(limits, aes(id, y = cv_mean, colour = ciclo)) +
   geom_ribbon(aes(ymin=cv_min, ymax=cv_max , fill=ciclo), alpha=0.2) + 
   geom_point() +
   scale_x_continuous(breaks = seq(from = 1, to = 12, by = 1)) +
-  scale_fill_manual( 'cycle' , values = c("gray30", "#008080")) +
-  scale_colour_manual('cycle' , values = c("gray30", "#008080")) +
+  scale_fill_manual( 'Season' , values = c("gray30", "#008080")) +
+  scale_colour_manual('Season' , values = c("gray30", "#008080")) +
   facet_grid(. ~ zone,  labeller = labeller(zone = as_labeller(c("CERETE" = 'Cereté (Córdoba)', "ESPINAL" = 'El Espinal (Tolima)',  "LA_UNION" = 'La Unión (Valle del Cauca)')))) +
   ylim(0, 100) +
   theme_bw() + 
@@ -128,7 +167,7 @@ mean_p <- Retro_filter%>%
   ungroup()
 
 # =-=-=-= ggplot labellers (only for the graphs).  
-C <- as_labeller(c('1' = 'Cycle 1', '2' = 'Cycle 2'))
+C <- as_labeller(c('1' = 'Season A', '2' = 'Season B'))
 Z <- as_labeller(c("CERETE" = 'Cereté (Córdoba)', "ESPINAL" = 'El Espinal (Tolima)',  "UNION" = 'La Unión (Valle del Cauca)'))
 
 
