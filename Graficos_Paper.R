@@ -51,7 +51,7 @@ cowsay::say(what = "Graphs Eliana and S.", by = "frog", what_color = "#FF4500", 
 V <- as_labeller(c('A' = 'Season A', 'B' = 'Season B'))
 Z1 <- as_labeller(c("CERETE" = 'Cereté (Córdoba)', "ESPINAL" = 'El Espinal (Tolima)',  "LA_UNION" = 'La Unión (Valle del Cauca)'))
 
-
+# S9.
 Historic_fil %>% 
   group_by(zone, variety, ciclo, date) %>% 
   summarise(HWAM = mean(HWAM))  %>%   
@@ -69,7 +69,7 @@ ggsave("graphs/His_a.png", width = 10, height = 6)
 
 
 
-# Grafico Eliana - Lizeth ...
+# Grafico Eliana - Lizeth ... Figure 2
 Historic_fil %>% group_by(year,zone) %>%  summarise(rend = mean(HWAM), desv = sd(HWAM)) %>% 
   ggplot(.,aes(year, rend)) + geom_line()+geom_linerange(aes(ymin=rend-desv, ymax=rend+desv)) + 
   theme_bw()+ 
@@ -78,6 +78,51 @@ Historic_fil %>% group_by(year,zone) %>%  summarise(rend = mean(HWAM), desv = sd
 
 ggsave("Figure_2.pdf", width = 10, height = 5)
 ggsave("Figure_2.png", width = 10, height = 5)
+
+
+
+# S...
+total <- Historic_fil %>% group_by(zone, variety) %>% count() %>% pull(n) %>% unique()
+
+a <- Historic_fil %>% 
+  nest(-year,-zone, -id, -ciclo) %>% 
+  mutate(order = purrr::map(.x = data, .f = function(x){ x %>% arrange(desc(HWAM)) %>% mutate(order = 1:4) })) %>% 
+  dplyr::select(-data) %>% 
+  unnest() %>% 
+  dplyr::select(-ciclo, -id, -month, -date) %>% 
+  group_by(zone, year, variety, order) %>% 
+  count(order) %>% 
+  ungroup() %>% 
+  group_by(zone, variety, order) %>% 
+  summarise(n = sum(n)/total * 100)
+
+
+a %>% 
+  ggplot(aes(x = variety, y = n, fill = as.character(order))) + 
+  geom_bar(stat = 'identity') +
+  scale_fill_viridis_d() + 
+  theme_bw() +
+  facet_wrap(~zone, labeller = labeller(zone = as_labeller(c("CERETE" = 'Cereté (Córdoba)', "ESPINAL" = 'El Espinal (Tolima)',  "LA_UNION" = 'La Unión (Valle del Cauca)')))) + 
+  labs(x = 'Variety', y = 'Percentaje', fill = 'Order')
+
+ggsave("graphs/order_H.pdf", width = 9, height = 4)
+ggsave("graphs/order_H.png", width = 9, height = 4)
+
+
+
+
+
+a %>% 
+  ggplot(aes(x = as.character(order), y = n, fill = variety)) + 
+  geom_bar(stat = 'identity') +
+  scale_fill_viridis_d() + 
+  theme_bw() +
+  facet_wrap(~zone, labeller = labeller(zone = as_labeller(c("CERETE" = 'Cereté (Córdoba)', "ESPINAL" = 'El Espinal (Tolima)',  "LA_UNION" = 'La Unión (Valle del Cauca)')))) + 
+  labs(x = 'Order', y = 'Percentaje', fill = 'Variety')
+
+ggsave("graphs/order_O.pdf", width = 9, height = 4)
+ggsave("graphs/order_O.png", width = 9, height = 4)
+
 
 
 # =----------------------------------------------------------------------------------
@@ -1025,3 +1070,53 @@ test %>%
 
 ggsave(filename = 'graphs/sowing_date_type6.png', height = 5.5, width = 10.5, dpi = 300)
 ggsave(filename = 'graphs/sowing_date_type6.pdf', height = 5.5, width = 10.5, dpi = 200)
+
+
+
+
+
+# ----------------------------------------------------------------------------
+# Revision de los graphs de climatologia :D 
+# ----------------------------------------------------------------------------
+
+LaUnion <- read_csv("D:/OneDrive - CGIAR/Desktop/Maize_Paper/Maize_Paper/daily_data/Cerete.csv")
+
+LaUnion <- LaUnion %>% 
+  group_by(month, year) %>% 
+  summarise(precip =  sum(precip), tmin = mean(tmin), tmax = mean(tmax)) %>% 
+  ungroup %>% 
+  group_by(month) %>% 
+  summarise(precip = mean(precip), tmin = mean(tmin), tmax = mean(tmax)) %>%  
+  gather(type, Temperature, -month, -precip) 
+
+round(max(LaUnion$precip), 0)/round(max(LaUnion$Temperature), 0)
+
+gp1 <- LaUnion %>%
+  ggplot() + 
+  geom_bar(mapping = aes(x = month, y = precip * round(max(LaUnion$Temperature), 0) / round(max(LaUnion$precip), 0) ), 
+           stat = "identity", fill = '#A4A4A4', alpha = 0.8) + 
+  geom_point(mapping = aes(x = month, y = Temperature, colour = type )) + 
+  geom_line(mapping = aes(x = month, y = Temperature, colour = type, group = factor(type))) +
+  scale_y_continuous(name = expression("Temperature ("~degree~"C)"), limits = c(0, round(max(LaUnion$Temperature), 0) + 1)) +
+  scale_colour_manual( breaks=c('tmax', 'tmin'),
+                       labels=c('T. Max', 'T. Min'),
+                       values = c("red", "blue")) +
+  scale_x_continuous( breaks = 1:12, labels = month.abb)
+
+gp1 <- gp1 %+% 
+  scale_y_continuous(name = expression("Temperature ("~degree~"C)"),
+                     sec.axis = sec_axis(~ . * round(max(test$precip), 0) / round(max(test$Temperature), 0) , 
+                                         name = "Precipitation (mm)"), 
+                     limits = c(0, round(max(test$Temperature), 0) + 1)) +
+  theme_bw() +
+  labs(x = '', colour = '') +
+  theme(legend.position = 'none', 
+        text = element_text(size=15), 
+        axis.text=element_text(colour="black"))
+
+gp1  
+
+ggsave(filename = 'daily_preliminar/laUnion.png', height = 5, width = 8, dpi = 300)
+
+
+
