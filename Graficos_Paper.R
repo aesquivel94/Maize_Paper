@@ -103,7 +103,7 @@ a %>%
   scale_fill_viridis_d() + 
   theme_bw() +
   facet_wrap(~zone, labeller = labeller(zone = as_labeller(c("CERETE" = 'Cereté (Córdoba)', "ESPINAL" = 'El Espinal (Tolima)',  "LA_UNION" = 'La Unión (Valle del Cauca)')))) + 
-  labs(x = 'Variety', y = 'Percentaje', fill = 'Order')
+  labs(x = 'Variety', y = 'Percentage [%]', fill = 'Order')
 
 ggsave("graphs/order_H.pdf", width = 9, height = 4)
 ggsave("graphs/order_H.png", width = 9, height = 4)
